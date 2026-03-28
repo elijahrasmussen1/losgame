@@ -1,0 +1,216 @@
+-- WaveMachine.client.lua
+-- Place in StarterPlayerScripts
+
+local Players      = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local RunService   = game:GetService("RunService")
+
+local player    = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+local character = player.Character or player.CharacterAdded:Wait()
+
+-- =====================================================
+-- FIND THE GUI
+-- =====================================================
+local realHud = playerGui:WaitForChild("REAL", 30)
+if not realHud then
+	warn("[WaveMachine] 'REAL' ScreenGui not found in PlayerGui"); return
+end
+
+local waveGui = realHud:WaitForChild("WaveGUIMain", 30)
+if not waveGui then
+	warn("[WaveMachine] WaveGUIMain not found inside REAL"); return
+end
+
+local closeBtn = waveGui:FindFirstChild("CloseButtonMain", true)
+if not closeBtn then
+	warn("[WaveMachine] CloseButtonMain not found")
+end
+
+-- =====================================================
+-- POSITIONS
+-- =====================================================
+local onScreenPos = UDim2.new(
+	waveGui.Position.X.Scale, waveGui.Position.X.Offset,
+	waveGui.Position.Y.Scale, waveGui.Position.Y.Offset - 30
+)
+local offScreenPos = UDim2.new(
+	waveGui.Position.X.Scale, waveGui.Position.X.Offset,
+	waveGui.Position.Y.Scale, waveGui.Position.Y.Offset + 50
+)
+
+local OPEN_INFO  = TweenInfo.new(0.35, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+local CLOSE_INFO = TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+
+-- how close the player needs to be to the part (studs)
+local PROXIMITY = 8
+
+-- =====================================================
+-- OPEN / CLOSE
+-- =====================================================
+local isOpen      = false
+local activeTween = nil
+
+local function stopTween()
+	if activeTween then
+		activeTween:Cancel()
+		activeTween = nil
+	end
+end
+
+local function openGui()
+	if isOpen then return end
+	isOpen = true
+	stopTween()
+
+	waveGui.Position = offScreenPos
+	waveGui.Visible  = true
+
+	activeTween = TweenService:Create(waveGui, OPEN_INFO, { Position = onScreenPos })
+	activeTween:Play()
+end
+
+local function closeGui()
+	if not isOpen then return end
+	isOpen = false
+	stopTween()
+
+	activeTween = TweenService:Create(waveGui, CLOSE_INFO, { Position = offScreenPos })
+	activeTween:Play()
+
+	task.delay(0.26, function()
+		if not isOpen then
+			waveGui.Visible  = false
+			waveGui.Position = onScreenPos
+		end
+	end)
+end
+
+local function toggleGui()
+	if isOpen then
+		closeGui()
+	else
+		openGui()
+	end
+end
+
+-- =====================================================
+-- START HIDDEN
+-- =====================================================
+waveGui.Visible  = false
+waveGui.Position = onScreenPos
+
+-- =====================================================
+-- CLOSE BUTTON
+-- =====================================================
+if closeBtn then
+	closeBtn.MouseButton1Click:Connect(closeGui)
+
+	local origCol = closeBtn.BackgroundColor3
+	closeBtn.MouseEnter:Connect(function()
+		TweenService:Create(closeBtn,
+			TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{ BackgroundColor3 = Color3.fromRGB(
+				math.min(origCol.R * 255 + 30, 255),
+				math.min(origCol.G * 255 + 10, 255),
+				math.min(origCol.B * 255 + 10, 255)
+				)}
+		):Play()
+	end)
+	closeBtn.MouseLeave:Connect(function()
+		TweenService:Create(closeBtn,
+			TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{ BackgroundColor3 = origCol }
+		):Play()
+	end)
+	closeBtn.MouseButton1Down:Connect(function()
+		closeBtn.BackgroundColor3 = Color3.fromRGB(
+			math.max(origCol.R * 255 - 30, 0),
+			math.max(origCol.G * 255 - 30, 0),
+			math.max(origCol.B * 255 - 30, 0)
+		)
+	end)
+	closeBtn.MouseButton1Up:Connect(function()
+		TweenService:Create(closeBtn,
+			TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{ BackgroundColor3 = origCol }
+		):Play()
+	end)
+end
+
+-- =====================================================
+-- PROXIMITY LOOP — replaces Touched/TouchEnded entirely
+-- checks every 0.1s whether player is near FloodMachinePart
+-- =====================================================
+local floodPart       = nil
+local manuallyOpened  = false  -- true when opened via StopWater btn, skip proximity close
+
+local function watchForPart()
+	local found = workspace:FindFirstChild("FloodMachinePart", true)
+	if found and found:IsA("BasePart") then
+		floodPart = found
+	else
+		workspace.DescendantAdded:Connect(function(d)
+			if d.Name == "FloodMachinePart" and d:IsA("BasePart") then
+				floodPart = d
+			end
+		end)
+	end
+end
+watchForPart()
+
+-- poll every 0.1s — smooth enough, not expensive
+task.spawn(function()
+	while true do
+		task.wait(0.1)
+
+		if not floodPart then continue end
+
+		local char = player.Character
+		local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+		if not hrp then continue end
+
+		local dist = (hrp.Position - floodPart.Position).Magnitude
+
+		if dist <= PROXIMITY then
+			if not isOpen then
+				manuallyOpened = false
+				openGui()
+			end
+		else
+			-- only proximity-close if it was opened by the part, not the button
+			if isOpen and not manuallyOpened then
+				closeGui()
+			end
+		end
+	end
+end)
+
+-- =====================================================
+-- TRIGGER — StopWater button toggles open/close
+-- marked as manuallyOpened so proximity loop won't close it
+-- =====================================================
+local function tryBindStopWater(gui)
+	local btn = gui:FindFirstChild("StopWater", true)
+	if btn and (btn:IsA("TextButton") or btn:IsA("ImageButton")) then
+		btn.MouseButton1Click:Connect(function()
+			manuallyOpened = not isOpen  -- will be true when about to open
+			toggleGui()
+		end)
+	end
+end
+
+for _, gui in ipairs(playerGui:GetChildren()) do
+	tryBindStopWater(gui)
+end
+playerGui.ChildAdded:Connect(function(child)
+	task.wait()
+	tryBindStopWater(child)
+end)
+
+-- =====================================================
+-- CHARACTER REFRESH
+-- =====================================================
+player.CharacterAdded:Connect(function(c)
+	character = c
+end)
