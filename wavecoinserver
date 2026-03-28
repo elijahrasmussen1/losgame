@@ -1,0 +1,172 @@
+-- WaveMachineCoins.server.lua
+-- Place in ServerScriptService
+
+local Players         = game:GetService("Players")
+local DataStoreService = game:GetService("DataStoreService")
+local MarketplaceService = game:GetService("MarketplaceService")
+
+local coinStore = DataStoreService:GetDataStore("FloodCoins_v1")
+
+-- =====================================================
+-- PRODUCT IDS — map each Robux product to coin amount
+-- Replace these IDs with your real Developer Product IDs
+-- from the Creator Dashboard
+-- =====================================================
+local COIN_PRODUCTS = {
+	[1234567891] = 10,   -- example: $0.99  = 10  coins
+	[1234567892] = 50,   -- example: $4.99  = 50  coins
+	[1234567893] = 120,  -- example: $9.99  = 120 coins
+	[1234567894] = 300,  -- example: $24.99 = 300 coins
+}
+
+-- =====================================================
+-- REMOTE EVENTS
+-- =====================================================
+local remotes = Instance.new("Folder")
+remotes.Name  = "WaveMachineRemotes"
+remotes.Parent = game:GetService("ReplicatedStorage")
+
+local updateCoinsEvent = Instance.new("RemoteEvent")
+updateCoinsEvent.Name   = "UpdateCoins"
+updateCoinsEvent.Parent = remotes
+
+local getCoinsFunction = Instance.new("RemoteFunction")
+getCoinsFunction.Name   = "GetCoins"
+getCoinsFunction.Parent = remotes
+
+-- =====================================================
+-- COIN LEDGER  (in-memory, source of truth per session)
+-- =====================================================
+local coinLedger = {}  -- [userId] = coinAmount
+
+local function getCoins(player)
+	return coinLedger[player.UserId] or 0
+end
+
+local function setCoins(player, amount)
+	coinLedger[player.UserId] = math.max(0, math.floor(amount))
+	-- tell the client to update the display
+	updateCoinsEvent:FireClient(player, coinLedger[player.UserId])
+end
+
+local function addCoins(player, amount)
+	setCoins(player, getCoins(player) + amount)
+end
+
+local function spendCoins(player, amount)
+	local current = getCoins(player)
+	if current < amount then
+		return false  -- not enough
+	end
+	setCoins(player, current - amount)
+	return true
+end
+
+-- =====================================================
+-- DATASTORE LOAD / SAVE
+-- =====================================================
+local function loadCoins(player)
+	local success, data = pcall(function()
+		return coinStore:GetAsync("coins_" .. player.UserId)
+	end)
+	if success and data then
+		coinLedger[player.UserId] = data
+	else
+		coinLedger[player.UserId] = 0
+	end
+	-- send initial value to client
+	updateCoinsEvent:FireClient(player, coinLedger[player.UserId])
+	print("[FloodCoins] Loaded", coinLedger[player.UserId], "coins for", player.Name)
+end
+
+local function saveCoins(player)
+	local amount = coinLedger[player.UserId]
+	if amount == nil then return end
+	local success, err = pcall(function()
+		coinStore:SetAsync("coins_" .. player.UserId, amount)
+	end)
+	if success then
+		print("[FloodCoins] Saved", amount, "coins for", player.Name)
+	else
+		warn("[FloodCoins] Save failed for", player.Name, ":", err)
+	end
+	coinLedger[player.UserId] = nil
+end
+
+-- =====================================================
+-- PLAYER JOIN / LEAVE
+-- =====================================================
+Players.PlayerAdded:Connect(function(player)
+	loadCoins(player)
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+	saveCoins(player)
+end)
+
+-- save all on server close
+game:BindToClose(function()
+	for _, player in ipairs(Players:GetPlayers()) do
+		saveCoins(player)
+	end
+end)
+
+-- load for any players already in when script runs
+for _, player in ipairs(Players:GetPlayers()) do
+	loadCoins(player)
+end
+
+-- =====================================================
+-- REMOTE FUNCTION — client asks for current coins
+-- =====================================================
+getCoinsFunction.OnServerInvoke = function(player)
+	return getCoins(player)
+end
+
+-- =====================================================
+-- DEVELOPER PRODUCT PURCHASE HANDLER
+-- =====================================================
+MarketplaceService.ProcessReceipt = function(receiptInfo)
+	local player = Players:GetPlayerByUserId(receiptInfo.PlayerId)
+
+	-- player left mid-purchase — return NotProcessedYet so it retries
+	if not player then
+		return Enum.ProductPurchaseDecision.NotProcessedYet
+	end
+
+	local coinsToGive = COIN_PRODUCTS[receiptInfo.ProductId]
+
+	if coinsToGive then
+		addCoins(player, coinsToGive)
+		print("[FloodCoins]", player.Name, "purchased", coinsToGive, "coins via product", receiptInfo.ProductId)
+
+		-- save immediately after purchase so coins aren't lost
+		local success, err = pcall(function()
+			coinStore:SetAsync("coins_" .. player.UserId, getCoins(player))
+		end)
+		if not success then
+			warn("[FloodCoins] Post-purchase save failed:", err)
+		end
+	else
+		warn("[FloodCoins] Unknown product ID:", receiptInfo.ProductId)
+	end
+
+	return Enum.ProductPurchaseDecision.PurchaseGranted
+end
+
+-- =====================================================
+-- SPEND COINS REMOTE (called from WaveMachine client)
+-- =====================================================
+local spendCoinsEvent = Instance.new("RemoteEvent")
+spendCoinsEvent.Name   = "SpendCoins"
+spendCoinsEvent.Parent = remotes
+
+spendCoinsEvent.OnServerEvent:Connect(function(player, amount)
+	if type(amount) ~= "number" or amount <= 0 then return end
+	local success = spendCoins(player, amount)
+	if not success then
+		-- fire back to tell client they can't afford it
+		updateCoinsEvent:FireClient(player, getCoins(player))
+		warn("[FloodCoins]", player.Name, "tried to spend", amount, "but only has", getCoins(player))
+	end
+end)
