@@ -1,0 +1,597 @@
+-- ServerScriptService/AdminRemote.server.lua
+-- made by elijxhraz
+
+local Players           = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local MessagingService  = game:GetService("MessagingService")
+local RunService        = game:GetService("RunService")
+local ServerStorage     = game:GetService("ServerStorage")
+
+-- =====================================================
+-- STUDIO GUARD
+-- =====================================================
+local IS_STUDIO = RunService:IsStudio()
+if IS_STUDIO then
+	warn("[AdminRemote] Running in Studio — MessagingService cross-server is DISABLED in Studio.")
+	warn("[AdminRemote] Announcements will still fire locally. Test cross-server in live published game.")
+end
+
+-- =====================================================
+-- CREATE REMOTES IMMEDIATELY
+-- =====================================================
+local function getOrCreate(name, class)
+	local obj = ReplicatedStorage:FindFirstChild(name)
+	if not obj then
+		obj        = Instance.new(class)
+		obj.Name   = name
+		obj.Parent = ReplicatedStorage
+	end
+	return obj
+end
+
+local adminRemote    = getOrCreate("AdminRemote",         "RemoteEvent")
+local announceRemote = getOrCreate("AdminAnnounceRemote", "RemoteEvent")
+local rainbowRemote  = getOrCreate("RainbowEventRemote",  "RemoteEvent")
+
+-- =====================================================
+-- MONEY API  (wait for MoneyService to be ready)
+-- =====================================================
+local apiBindable = ServerStorage:WaitForChild("MoneyAPIBindable", 30)
+if not apiBindable then
+	warn("[AdminRemote] MoneyAPIBindable not found — economy commands disabled")
+end
+
+local function apiCall(action, player, amount)
+	if not apiBindable then return nil end
+	local ok, result = pcall(function()
+		return apiBindable:Invoke(action, player, amount)
+	end)
+	if not ok then
+		warn("[AdminRemote] MoneyAPI call failed (" .. action .. "):", result)
+		return nil
+	end
+	return result
+end
+
+-- =====================================================
+-- ADMIN LIST
+-- =====================================================
+local adminUserIds = { 135740528, 8830142974, 541166467, 2741916860, 4178881808, 4099915549 }
+
+local function isAdmin(player)
+	if player.UserId < 0 then return true end
+	for _, id in ipairs(adminUserIds) do
+		if player.UserId == id then return true end
+	end
+	return false
+end
+
+-- =====================================================
+-- HELPERS
+-- =====================================================
+local function findPlayer(name)
+	if not name or name == "" then return nil end
+	local low = name:lower()
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p.Name:lower() == low then return p end
+	end
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p.Name:lower():sub(1, #low) == low then return p end
+	end
+	return nil
+end
+
+-- =====================================================
+-- CROSS-SERVER ANNOUNCEMENT SYSTEM
+-- =====================================================
+local ANNOUNCE_TOPIC  = "AdminAnnounce_v2"
+local RATE_LIMIT_SECS = 3
+local MAX_MSG_LENGTH  = 200
+local lastPublishTime = 0
+local messagingOk     = false
+
+local bridge      = Instance.new("BindableEvent")
+bridge.Name       = "AnnounceBridge"
+bridge.Parent     = script
+
+bridge.Event:Connect(function(senderName, msg)
+	local count = #Players:GetPlayers()
+	warn(string.format(
+		"[Announce] BRIDGE firing FireAllClients — sender=%s msg=%s players=%d",
+		senderName, msg, count
+		))
+	announceRemote:FireAllClients(senderName, msg)
+	warn("[Announce] FireAllClients completed")
+end)
+
+local function setupSubscription()
+	if IS_STUDIO then
+		warn("[Announce] Skipping SubscribeAsync in Studio")
+		return false
+	end
+	local ok, err = pcall(function()
+		MessagingService:SubscribeAsync(ANNOUNCE_TOPIC, function(data)
+			warn("[Announce] SubscribeAsync callback received message on this server")
+			local payload = data and data.Data
+			if type(payload) ~= "table" then
+				warn("[Announce] Invalid payload type:", type(payload)); return
+			end
+			local sName = tostring(payload.senderName or "Admin")
+			local msg   = tostring(payload.msg or "")
+			if sName == "" or msg == "" then
+				warn("[Announce] Empty senderName or msg — ignoring"); return
+			end
+			warn(string.format("[Announce] Relaying to clients — sender=%s msg=%s", sName, msg))
+			bridge:Fire(sName, msg)
+		end)
+	end)
+	if ok then
+		warn("[Announce] SubscribeAsync SUCCESS — topic: " .. ANNOUNCE_TOPIC)
+		return true
+	else
+		warn("[Announce] SubscribeAsync FAILED: " .. tostring(err))
+		return false
+	end
+end
+
+messagingOk = setupSubscription()
+
+-- =====================================================
+-- RAINBOW EVENT CROSS-SERVER SUBSCRIPTION
+-- =====================================================
+local rainbowAutoEndThreads = {}
+
+local function spawnRainbowLocally(senderName)
+	local template = ServerStorage:FindFirstChild("RainbowEventPopUp")
+	if not template then
+		warn("[AdminRemote] RainbowEventPopUp not found in ServerStorage"); return
+	end
+	local existing = workspace:FindFirstChild("RainbowEventPopUp")
+	if existing then existing:Destroy() end
+	local clone = template:Clone()
+	clone.Parent = workspace
+	rainbowRemote:FireAllClients("start", senderName)
+	-- cancel any previous auto-end
+	if rainbowAutoEndThreads.current then
+		task.cancel(rainbowAutoEndThreads.current)
+		rainbowAutoEndThreads.current = nil
+	end
+	rainbowAutoEndThreads.current = task.delay(300, function()
+		local current = workspace:FindFirstChild("RainbowEventPopUp")
+		if current then current:Destroy() end
+		rainbowRemote:FireAllClients("end", nil)
+		rainbowAutoEndThreads.current = nil
+	end)
+end
+
+local function endRainbowLocally()
+	if rainbowAutoEndThreads.current then
+		task.cancel(rainbowAutoEndThreads.current)
+		rainbowAutoEndThreads.current = nil
+	end
+	local current = workspace:FindFirstChild("RainbowEventPopUp")
+	if current then current:Destroy() end
+	rainbowRemote:FireAllClients("end", nil)
+end
+
+if not IS_STUDIO then
+	pcall(function()
+		MessagingService:SubscribeAsync("RainbowEvent_v1", function(data)
+			local payload = data and data.Data
+			if type(payload) ~= "table" then return end
+			if payload.type == "start" then
+				spawnRainbowLocally(tostring(payload.senderName or "Admin"))
+			elseif payload.type == "end" then
+				endRainbowLocally()
+			end
+		end)
+	end)
+end
+
+-- =====================================================
+-- ANNOUNCEMENT PUBLISH
+-- =====================================================
+local function publishAnnouncement(senderName, msg)
+	if type(senderName) ~= "string" or senderName == "" then return false end
+	if type(msg) ~= "string" or msg == "" then return false end
+	if #msg > MAX_MSG_LENGTH then msg = msg:sub(1, MAX_MSG_LENGTH) end
+	local now = os.time()
+	if (now - lastPublishTime) < RATE_LIMIT_SECS then
+		warn("[Announce] Rate limited — wait " .. (RATE_LIMIT_SECS-(now-lastPublishTime)) .. "s")
+		return false
+	end
+	lastPublishTime = now
+	if IS_STUDIO or not messagingOk then
+		warn("[Announce] MessagingService unavailable — firing locally only")
+		announceRemote:FireAllClients(senderName, msg)
+		return true
+	end
+	warn(string.format("[Announce] PublishAsync -> topic=%s sender=%s msg=%s", ANNOUNCE_TOPIC, senderName, msg))
+	local ok, err = pcall(function()
+		MessagingService:PublishAsync(ANNOUNCE_TOPIC, { senderName = senderName, msg = msg })
+	end)
+	if ok then
+		warn("[Announce] PublishAsync SUCCESS")
+		return true
+	else
+		warn("[Announce] PublishAsync FAILED:", err)
+		announceRemote:FireAllClients(senderName, msg)
+		return false
+	end
+end
+
+-- =====================================================
+-- INVISIBILITY
+-- =====================================================
+local invisCache = {}
+
+local function makePlayerInvisible(target)
+	local char = target.Character; if not char then return end
+	local cache = {}
+	for _, obj in ipairs(char:GetDescendants()) do
+		if (obj:IsA("BasePart") or obj:IsA("MeshPart")) and obj.Name ~= "HumanoidRootPart" then
+			cache[obj] = obj.Transparency; obj.Transparency = 1
+		elseif obj:IsA("Decal") or obj:IsA("SpecialMesh") then
+			cache[obj] = obj.Transparency; obj.Transparency = 1
+		elseif obj:IsA("BillboardGui") then
+			cache[obj] = obj.Enabled; obj.Enabled = false
+		end
+	end
+	invisCache[target] = cache
+end
+
+local function makePlayerVisible(target)
+	local char = target.Character; if not char then return end
+	local cache = invisCache[target]
+	if not cache then
+		for _, obj in ipairs(char:GetDescendants()) do
+			if (obj:IsA("BasePart") or obj:IsA("MeshPart")) and obj.Name ~= "HumanoidRootPart" then
+				obj.Transparency = 0
+			elseif obj:IsA("Decal") then obj.Transparency = 0
+			elseif obj:IsA("BillboardGui") then obj.Enabled = true
+			end
+		end
+		return
+	end
+	for obj, original in pairs(cache) do
+		if obj and obj.Parent then
+			if obj:IsA("BillboardGui") then obj.Enabled = original
+			else obj.Transparency = original end
+		end
+	end
+	invisCache[target] = nil
+end
+
+-- =====================================================
+-- FLING
+-- =====================================================
+local FLING_SMALL_VEL  = 80
+local FLING_MEGA_VEL   = 1100
+local FLING_LOOP_VEL   = 80
+local loopFlingThreads = {}
+
+local function doFling(target, speed)
+	local char = target.Character; if not char then return end
+	local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
+	for _, bv in ipairs(root:GetChildren()) do
+		if bv:IsA("BodyVelocity") then bv:Destroy() end
+	end
+	local angle     = math.random() * math.pi * 2
+	local vertScale = (speed <= FLING_SMALL_VEL) and 0.35 or 0.55
+	local bv        = Instance.new("BodyVelocity")
+	bv.MaxForce     = Vector3.new(1e8, 1e8, 1e8)
+	bv.Velocity     = Vector3.new(math.cos(angle)*speed, speed*vertScale, math.sin(angle)*speed)
+	bv.Parent       = root
+	task.delay(0.15, function() if bv and bv.Parent then bv:Destroy() end end)
+end
+
+local function startLoopFling(target)
+	if loopFlingThreads[target] then task.cancel(loopFlingThreads[target]) end
+	loopFlingThreads[target] = task.spawn(function()
+		while true do
+			if not target or not target.Parent then break end
+			if target.Character then doFling(target, FLING_LOOP_VEL) end
+			task.wait(1.4)
+		end
+	end)
+end
+
+local function stopLoopFling(target)
+	if loopFlingThreads[target] then
+		task.cancel(loopFlingThreads[target]); loopFlingThreads[target] = nil
+	end
+	local char = target and target.Character
+	if char then
+		local root = char:FindFirstChild("HumanoidRootPart")
+		if root then
+			for _, bv in ipairs(root:GetChildren()) do
+				if bv:IsA("BodyVelocity") then bv:Destroy() end
+			end
+		end
+	end
+end
+
+-- =====================================================
+-- MUTE
+-- =====================================================
+local mutedPlayers = {}
+
+-- =====================================================
+-- CLEANUP
+-- =====================================================
+Players.PlayerRemoving:Connect(function(p)
+	stopLoopFling(p)
+	invisCache[p]          = nil
+	mutedPlayers[p.UserId] = nil
+end)
+
+-- =====================================================
+-- REMOTE HANDLER
+-- =====================================================
+adminRemote.OnServerEvent:Connect(function(sender, action, arg1, arg2, arg3)
+	if not isAdmin(sender) then
+		warn("[AdminRemote] Unauthorized attempt by:", sender.Name)
+		return
+	end
+
+	warn(string.format("[AdminRemote] %s → action=%s arg1=%s arg2=%s arg3=%s",
+		sender.Name, tostring(action), tostring(arg1), tostring(arg2), tostring(arg3)))
+
+	-- ── ANNOUNCE ──────────────────────────────────────────────────────────────
+	if action == "announce" then
+		local msg      = tostring(arg1 or ""):match("^%s*(.-)%s*$")
+		local isGlobal = (arg2 == true)
+		if msg == "" then warn("[AdminRemote] announce: empty message"); return end
+		if isGlobal then
+			local sent = publishAnnouncement(sender.Name, msg)
+			if not sent then warn("[AdminRemote] announce: publishAnnouncement returned false") end
+		else
+			warn("[AdminRemote] announce: local only — sender=" .. sender.Name .. " msg=" .. msg)
+			announceRemote:FireAllClients(sender.Name, msg)
+		end
+		return
+	end
+
+	-- ── RAINBOW EVENT ─────────────────────────────────────────────────────────
+	if action == "event_start" then
+		local eventName = tostring(arg1 or ""):match("^%s*(.-)%s*$"):lower()
+		if eventName == "rainbow" then
+			local isGlobal = (arg2 == true)
+			if isGlobal and not IS_STUDIO and messagingOk then
+				-- Publish to all servers — each server's subscription will call
+				-- spawnRainbowLocally so this server also fires via the callback
+				local ok, err = pcall(function()
+					MessagingService:PublishAsync("RainbowEvent_v1", {
+						type       = "start",
+						senderName = sender.Name,
+					})
+				end)
+				if not ok then
+					warn("[AdminRemote] RainbowEvent PublishAsync failed:", err)
+					-- fallback: fire locally only
+					spawnRainbowLocally(sender.Name)
+				end
+			else
+				-- Local only (or Studio)
+				spawnRainbowLocally(sender.Name)
+			end
+		end
+		return
+	end
+
+	if action == "event_end" then
+		local eventName = tostring(arg1 or ""):match("^%s*(.-)%s*$"):lower()
+		if eventName == "rainbow" or eventName == "" then
+			local isGlobal = (arg2 == true)
+			if isGlobal and not IS_STUDIO and messagingOk then
+				local ok, err = pcall(function()
+					MessagingService:PublishAsync("RainbowEvent_v1", { type = "end" })
+				end)
+				if not ok then
+					warn("[AdminRemote] RainbowEvent end PublishAsync failed:", err)
+					endRainbowLocally()
+				end
+			else
+				endRainbowLocally()
+			end
+		end
+		return
+	end
+
+	-- ── EXPLODE ───────────────────────────────────────────────────────────────
+	if action == "explode" then
+		local target = findPlayer(tostring(arg1 or ""))
+		if not target then warn("[AdminRemote] explode: not found:", tostring(arg1)); return end
+		local char = target.Character; if not char then return end
+		local hum  = char:FindFirstChildOfClass("Humanoid")
+		local root = char:FindFirstChild("HumanoidRootPart")
+		if hum  then hum.Health = 0 end
+		if root then
+			local e = Instance.new("Explosion")
+			e.Position    = root.Position; e.BlastRadius = 10; e.BlastPressure = 400000
+			e.ExplosionType = Enum.ExplosionType.CratersAndDebris
+			e.DestroyJointRadiusPercent = 0; e.Parent = workspace
+		end
+		return
+	end
+
+	-- ── INVISIBLE ─────────────────────────────────────────────────────────────
+	if action == "invisible_on" then
+		local t = findPlayer(tostring(arg1 or ""))
+		if t then makePlayerInvisible(t) end; return
+	end
+	if action == "invisible_off" then
+		local t = findPlayer(tostring(arg1 or ""))
+		if t then makePlayerVisible(t) end; return
+	end
+
+	-- ── FLING ─────────────────────────────────────────────────────────────────
+	if action == "fling" then
+		local t = findPlayer(tostring(arg1 or ""))
+		if t then doFling(t, (arg2 == "mega") and FLING_MEGA_VEL or FLING_SMALL_VEL) end; return
+	end
+	if action == "fling_loop_start" then
+		local t = findPlayer(tostring(arg1 or ""))
+		if t then startLoopFling(t) end; return
+	end
+	if action == "fling_loop_stop" then
+		local t = findPlayer(tostring(arg1 or ""))
+		if t then stopLoopFling(t) end; return
+	end
+
+	-- ── KICK ──────────────────────────────────────────────────────────────────
+	if action == "kick" then
+		local t = findPlayer(tostring(arg1 or ""))
+		if not t then warn("[AdminRemote] kick: not found"); return end
+		t:Kick("Kicked by admin. Reason: " .. tostring(arg2 or "No reason given")); return
+	end
+
+	-- ── BAN ───────────────────────────────────────────────────────────────────
+	if action == "ban" then
+		local username = tostring(arg1 or ""); local reason = tostring(arg2 or "No reason given")
+		local duration = tostring(arg3 or "Permanent")
+		if username == "" then return end
+		local secs
+		if     duration == "1 Day"   then secs = 86400
+		elseif duration == "1 Week"  then secs = 604800
+		elseif duration == "1 Month" then secs = 2592000
+		else                              secs = -1 end
+		local t   = findPlayer(username)
+		local uid = t and t.UserId
+		if not uid then
+			local ok, id = pcall(function() return Players:GetUserIdFromNameAsync(username) end)
+			if ok then uid = id end
+		end
+		if not uid then warn("[AdminRemote] ban: could not resolve:", username); return end
+		local ok, err = pcall(function()
+			Players:BanAsync({ UserIds = {uid}, Duration = secs,
+				DisplayReason = "Banned. Reason: " .. reason, PrivateReason = reason,
+				ExcludeAltAccounts = false, ApplyToUniverse = true })
+		end)
+		if not ok then warn("[AdminRemote] BanAsync failed:", err) end
+		if t then t:Kick("Banned. Reason: " .. reason) end
+		return
+	end
+
+	-- ── UNBAN ─────────────────────────────────────────────────────────────────
+	if action == "unban" then
+		local username = tostring(arg1 or ""); if username == "" then return end
+		local ok2, uid = pcall(function() return Players:GetUserIdFromNameAsync(username) end)
+		if not ok2 or not uid then warn("[AdminRemote] unban: resolve failed"); return end
+		local ok, err = pcall(function()
+			Players:UnbanAsync({ UserIds = {uid}, ApplyToUniverse = true })
+		end)
+		if not ok then warn("[AdminRemote] UnbanAsync failed:", err) end
+		return
+	end
+
+	-- ── MUTE / UNMUTE ─────────────────────────────────────────────────────────
+	if action == "mute" then
+		local t = findPlayer(tostring(arg1 or ""))
+		if t then
+			mutedPlayers[t.UserId] = {
+				reason   = tostring(arg2 or ""),
+				duration = tostring(arg3 or "Permanent"),
+				time     = os.time(),
+			}
+		end
+		return
+	end
+	if action == "unmute" then
+		local t = findPlayer(tostring(arg1 or ""))
+		if t then mutedPlayers[t.UserId] = nil end; return
+	end
+
+	-- ── ECONOMY ───────────────────────────────────────────────────────────────
+	if action == "give_cash" or action == "givecash" then
+		local t = findPlayer(tostring(arg1 or ""))
+		if not t then warn("[AdminRemote] give_cash: player not found"); return end
+		local amount = tonumber(arg2) or 0
+		if amount <= 0 then warn("[AdminRemote] give_cash: invalid amount"); return end
+		apiCall("AddCash", t, amount)
+		warn(string.format("[AdminRemote] give_cash: +%g → %s", amount, t.Name))
+		return
+	end
+
+	if action == "remove_cash" or action == "removecash" then
+		local t = findPlayer(tostring(arg1 or ""))
+		if not t then warn("[AdminRemote] remove_cash: player not found"); return end
+		local amount = tonumber(arg2) or 0
+		if amount <= 0 then warn("[AdminRemote] remove_cash: invalid amount"); return end
+		local current = apiCall("GetCash", t) or 0
+		apiCall("SetCash", t, math.max(0, current - amount))
+		warn(string.format("[AdminRemote] remove_cash: -%g from %s", amount, t.Name))
+		return
+	end
+
+	if action == "set_cash" or action == "setcash" then
+		local t = findPlayer(tostring(arg1 or ""))
+		if not t then warn("[AdminRemote] set_cash: player not found"); return end
+		local amount = tonumber(arg2)
+		if not amount or amount < 0 then warn("[AdminRemote] set_cash: invalid amount"); return end
+		apiCall("SetCash", t, amount)
+		warn(string.format("[AdminRemote] set_cash: %s → %g", t.Name, amount))
+		return
+	end
+
+	if action == "reset_cash" or action == "wipecash" then
+		local t = findPlayer(tostring(arg1 or ""))
+		if not t then warn("[AdminRemote] reset_cash: player not found"); return end
+		apiCall("SetCash", t, 0)
+		warn("[AdminRemote] reset_cash: wiped balance for " .. t.Name)
+		return
+	end
+
+	-- ── SPEED / JUMP ──────────────────────────────────────────────────────────
+	if action == "set_speed" then
+		local t = findPlayer(tostring(arg1 or "")); if not t then return end
+		local char = t.Character; if not char then return end
+		local hum = char:FindFirstChildOfClass("Humanoid"); if not hum then return end
+		hum.WalkSpeed = tonumber(arg2) or 16; return
+	end
+	if action == "set_jump" then
+		local t = findPlayer(tostring(arg1 or "")); if not t then return end
+		local char = t.Character; if not char then return end
+		local hum = char:FindFirstChildOfClass("Humanoid"); if not hum then return end
+		hum.JumpPower = tonumber(arg2) or 50; return
+	end
+
+	-- ── FREEZE ────────────────────────────────────────────────────────────────
+	if action == "freeze" then
+		local t = findPlayer(tostring(arg1 or "")); if not t then return end
+		local char = t.Character; if not char then return end
+		local root = char:FindFirstChild("HumanoidRootPart")
+		if root then root.Anchored = not root.Anchored end; return
+	end
+
+	-- ── TELEPORT ──────────────────────────────────────────────────────────────
+	if action == "tp_to" then
+		local t = findPlayer(tostring(arg1 or "")); if not t then return end
+		local sr = sender.Character and sender.Character:FindFirstChild("HumanoidRootPart")
+		local tr = t.Character      and t.Character:FindFirstChild("HumanoidRootPart")
+		if sr and tr then sr.CFrame = tr.CFrame + Vector3.new(0, 3, 0) end; return
+	end
+	if action == "tp_here" then
+		local t = findPlayer(tostring(arg1 or "")); if not t then return end
+		local sr = sender.Character and sender.Character:FindFirstChild("HumanoidRootPart")
+		local tr = t.Character      and t.Character:FindFirstChild("HumanoidRootPart")
+		if sr and tr then tr.CFrame = sr.CFrame + Vector3.new(0, 3, 0) end; return
+	end
+
+	-- ── ITEMS ─────────────────────────────────────────────────────────────────
+	if action == "give_item"   then warn("[AdminRemote] give_item stub");   return end
+	if action == "remove_item" then warn("[AdminRemote] remove_item stub"); return end
+	if action == "clear_inv"   then warn("[AdminRemote] clear_inv stub");   return end
+
+	-- ── INFORMATIONAL (client-side state only) ─────────────────────────────────
+	if action == "set_global" or action == "set_global_announce" then return end
+	if action == "fuse_give_luck" or action == "fuse_skip" or action == "fuse_set_global" then return end
+	if action == "get_ban_logs"   or action == "clear_ban_logs" then return end
+
+	warn("[AdminRemote] Unknown action:", tostring(action))
+end)
+
+warn(string.format(
+	"[AdminRemote] Ready — topic=%s messagingOk=%s studio=%s moneyAPI=%s",
+	ANNOUNCE_TOPIC, tostring(messagingOk), tostring(IS_STUDIO), tostring(apiBindable ~= nil)
+	))
