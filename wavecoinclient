@@ -1,0 +1,145 @@
+-- WaveMachineCoins.client.lua
+-- Place in StarterPlayerScripts
+
+local Players            = game:GetService("Players")
+local ReplicatedStorage  = game:GetService("ReplicatedStorage")
+local MarketplaceService = game:GetService("MarketplaceService")
+
+local player    = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- =====================================================
+-- WAIT FOR REMOTES
+-- =====================================================
+local remotes          = ReplicatedStorage:WaitForChild("WaveMachineRemotes", 30)
+local updateCoinsEvent = remotes:WaitForChild("UpdateCoins")
+local getCoinsFunction = remotes:WaitForChild("GetCoins")
+local spendCoinsEvent  = remotes:WaitForChild("SpendCoins")
+
+-- =====================================================
+-- FIND BOTH COIN LABELS
+-- 1. CoinsAmountMain  inside FloodCoins folder (HUD)
+-- 2. CoinsAmountGUI   inside WaveGUIMain       (shop panel)
+-- =====================================================
+local coinLabelHud  = nil   -- CoinsAmountMain in FloodCoins
+local coinLabelShop = nil   -- CoinsAmountGUI  in WaveGUIMain
+
+local function findLabels()
+	for _, gui in ipairs(playerGui:GetChildren()) do
+
+		-- 1. HUD label — FloodCoins/CoinsAmountMain
+		if not coinLabelHud then
+			local folder = gui:FindFirstChild("FloodCoins", true)
+			if folder then
+				coinLabelHud = folder:FindFirstChild("CoinsAmountMain", true)
+			end
+			-- fallback: direct descendant named CoinsAmountMain
+			if not coinLabelHud then
+				coinLabelHud = gui:FindFirstChild("CoinsAmountMain", true)
+			end
+		end
+
+		-- 2. Shop label — WaveGUIMain/CoinsAmountGUI
+		if not coinLabelShop then
+			local waveGui = gui:FindFirstChild("WaveGUIMain", true)
+			if waveGui then
+				coinLabelShop = waveGui:FindFirstChild("CoinsAmountGUI", true)
+			end
+		end
+	end
+end
+
+-- =====================================================
+-- UPDATE BOTH LABELS AT ONCE
+-- =====================================================
+local function updateLabels(amount)
+	local text = tostring(amount)
+	if coinLabelHud  then coinLabelHud.Text  = text end
+	if coinLabelShop then coinLabelShop.Text = text end
+end
+
+-- =====================================================
+-- RETRY LOOP — GUIs may load after script starts
+-- =====================================================
+task.spawn(function()
+	local attempts = 0
+	while (not coinLabelHud or not coinLabelShop) and attempts < 40 do
+		findLabels()
+		if not coinLabelHud or not coinLabelShop then
+			task.wait(0.5)
+			attempts += 1
+		end
+	end
+
+	if coinLabelHud then
+		print("[FloodCoins] Found HUD label:  ", coinLabelHud:GetFullName())
+	else
+		warn("[FloodCoins] CoinsAmountMain not found in FloodCoins after 20s")
+	end
+
+	if coinLabelShop then
+		print("[FloodCoins] Found shop label: ", coinLabelShop:GetFullName())
+	else
+		warn("[FloodCoins] CoinsAmountGUI not found in WaveGUIMain after 20s")
+	end
+
+	-- request current balance from server and display immediately
+	local current = getCoinsFunction:InvokeServer()
+	updateLabels(current)
+end)
+
+-- also re-search if new GUIs are added late
+playerGui.ChildAdded:Connect(function()
+	task.wait(0.5)
+	findLabels()
+end)
+
+-- =====================================================
+-- UPDATE DISPLAY WHEN SERVER FIRES
+-- =====================================================
+updateCoinsEvent.OnClientEvent:Connect(function(amount)
+	updateLabels(amount)
+	print("[FloodCoins] Balance updated:", amount)
+end)
+
+-- =====================================================
+-- PURCHASE BUTTONS
+-- Name any button "BuyCoins_PRODUCTID" and it
+-- will automatically prompt the purchase
+-- e.g. TextButton.Name = "BuyCoins_1234567891"
+-- =====================================================
+local function wireUpPurchaseButtons(gui)
+	for _, obj in ipairs(gui:GetDescendants()) do
+		if obj:IsA("TextButton") or obj:IsA("ImageButton") then
+			local productId = obj.Name:match("^BuyCoins_(%d+)$")
+			if productId then
+				obj.MouseButton1Click:Connect(function()
+					MarketplaceService:PromptProductPurchase(player, tonumber(productId))
+				end)
+				print("[FloodCoins] Wired purchase button for product:", productId)
+			end
+		end
+	end
+end
+
+for _, gui in ipairs(playerGui:GetChildren()) do
+	wireUpPurchaseButtons(gui)
+end
+playerGui.ChildAdded:Connect(function(child)
+	task.wait()
+	wireUpPurchaseButtons(child)
+end)
+
+-- =====================================================
+-- EXPOSE GLOBALS
+-- Use from WaveMachine.client.lua:
+--   _G.SpendFloodCoins(50)   -- deduct coins
+--   _G.GetFloodCoins()       -- get current balance
+-- =====================================================
+_G.SpendFloodCoins = function(amount)
+	spendCoinsEvent:FireServer(amount)
+end
+
+_G.GetFloodCoins = function()
+	return getCoinsFunction:InvokeServer()
+end
