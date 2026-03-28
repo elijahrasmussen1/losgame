@@ -13,7 +13,38 @@ local Players = game:GetService("Players")
 --   2 000 000  → "2M"
 --   3 400 000 000 → "3.4B"
 --   etc.
-local SUFFIXES = { "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc" }
+local SUFFIXES = {
+	"K",    -- 10^3   Thousand
+	"M",    -- 10^6   Million
+	"B",    -- 10^9   Billion
+	"T",    -- 10^12  Trillion
+	"Qa",   -- 10^15  Quadrillion
+	"Qi",   -- 10^18  Quintillion
+	"Sx",   -- 10^21  Sextillion
+	"Sp",   -- 10^24  Septillion
+	"Oc",   -- 10^27  Octillion
+	"No",   -- 10^30  Nonillion
+	"Dc",   -- 10^33  Decillion
+	"UDc",  -- 10^36  Undecillion
+	"DDc",  -- 10^39  Duodecillion
+	"TDc",  -- 10^42  Tredecillion
+	"QaDc", -- 10^45  Quattuordecillion
+	"QiDc", -- 10^48  Quindecillion
+	"SxDc", -- 10^51  Sexdecillion
+	"SpDc", -- 10^54  Septendecillion
+	"OcDc", -- 10^57  Octodecillion
+	"NoDc", -- 10^60  Novemdecillion
+	"Vg",   -- 10^63  Vigintillion
+	"UVg",  -- 10^66  Unvigintillion
+	"DVg",  -- 10^69  Duovigintillion
+	"TVg",  -- 10^72  Trevigintillion
+	"QaVg", -- 10^75  Quattuorvigintillion
+	"QiVg", -- 10^78  Quinvigintillion
+	"SxVg", -- 10^81  Sexvigintillion
+	"SpVg", -- 10^84  Septenvigintillion
+	"OcVg", -- 10^87  Octovigintillion
+	"NoVg", -- 10^90  Novemvigintillion
+}
 
 local function formatNumber(n)
 	n = tonumber(n) or 0
