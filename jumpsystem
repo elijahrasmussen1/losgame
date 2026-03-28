@@ -62,7 +62,8 @@ local function applyToCharacter(player, level)
 	local char = player.Character
 	local hum  = char and char:FindFirstChildOfClass("Humanoid")
 	if hum then
-		hum.JumpPower = jumpPowerForLevel(level)
+		hum.UseJumpPower = true  -- required: modern Roblox defaults to UseJumpPower=false
+		hum.JumpPower    = jumpPowerForLevel(level)
 	end
 end
 
