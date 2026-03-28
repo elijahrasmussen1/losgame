@@ -692,6 +692,32 @@ local function parseAmount(str)
 end
 
 -- =====================================================
+-- NUMBER FORMATTER
+-- =====================================================
+local FMT_SUFFIXES = {
+	"K","M","B","T",
+	"Qa","Qi","Sx","Sp","Oc","No",
+	"Dc","UDc","DDc","TDc","QaDc","QiDc","SxDc","SpDc","OcDc","NoDc",
+	"Vg","UVg","DVg","TVg","QaVg","QiVg","SxVg","SpVg","OcVg","NoVg",
+}
+local function formatAmount(n)
+	n = tonumber(n) or 0
+	local abs = math.abs(n)
+	for i = #FMT_SUFFIXES, 1, -1 do
+		local threshold = 10 ^ (i * 3)
+		if abs >= threshold then
+			local val = n / threshold
+			if val == math.floor(val) then
+				return tostring(math.floor(val)) .. FMT_SUFFIXES[i]
+			else
+				return string.format("%.1f", val) .. FMT_SUFFIXES[i]
+			end
+		end
+	end
+	return tostring(math.floor(n))
+end
+
+-- =====================================================
 -- FREE CAM
 -- =====================================================
 local freeCamActive=false; local freeCamConn=nil; local freeCamMouseConn=nil
@@ -1589,19 +1615,19 @@ do
 		local u=ecoPlayer.Text:match("^%s*(.-)%s*$"); local a=parseAmount(amtInput.Text)
 		if u=="" then showToast("Enter player name") return end
 		if not a then showToast("Invalid amount") return end
-		adminRemote:FireServer("give_cash",u,a); showFeedback("Gave $"..a.." to "..u)
+		adminRemote:FireServer("give_cash",u,a); showFeedback("Gave $"..formatAmount(a).." to "..u)
 	end)
 	mkBtn(page,"REMOVE CASH",C.btnRed,C.btnRedDk,HALF,36,PAD+HALF+6,146,function()
 		local u=ecoPlayer.Text:match("^%s*(.-)%s*$"); local a=parseAmount(amtInput.Text)
 		if u=="" then showToast("Enter player name") return end
 		if not a then showToast("Invalid amount") return end
-		adminRemote:FireServer("remove_cash",u,a); showFeedback("Removed $"..a.." from "..u)
+		adminRemote:FireServer("remove_cash",u,a); showFeedback("Removed $"..formatAmount(a).." from "..u)
 	end)
 	mkBtn(page,"SET CASH",C.btnCyan,C.btnCyanDk,HALF,36,PAD,188,function()
 		local u=ecoPlayer.Text:match("^%s*(.-)%s*$"); local a=parseAmount(amtInput.Text)
 		if u=="" then showToast("Enter player name") return end
 		if not a then showToast("Invalid amount") return end
-		adminRemote:FireServer("set_cash",u,a); showFeedback("Set cash of "..u.." to $"..a)
+		adminRemote:FireServer("set_cash",u,a); showFeedback("Set cash of "..u.." to $"..formatAmount(a))
 	end)
 	mkBtn(page,"RESET CASH",C.btnOrange,C.btnOrangeDk,HALF,36,PAD+HALF+6,188,function()
 		local u=ecoPlayer.Text:match("^%s*(.-)%s*$")
