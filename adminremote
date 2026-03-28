@@ -611,7 +611,18 @@ adminRemote.OnServerEvent:Connect(function(sender, action, arg1, arg2, arg3)
 		end
 		return
 	end
-	if action == "remove_item" then warn("[AdminRemote] remove_item stub"); return end
+	if action == "remove_item" then
+		local t        = findPlayer(tostring(arg1 or ""))
+		local itemName = tostring(arg2 or ""):lower()
+		if not t then warn("[AdminRemote] remove_item: player not found"); return end
+		if itemName == "wavecoins" then
+			local newBal = waveCoinApiCall("AddCoins", t, -10)
+			warn(string.format("[AdminRemote] remove_item wavecoins: -10 → %s (balance=%s)", t.Name, tostring(newBal)))
+		else
+			warn("[AdminRemote] remove_item: unknown item '" .. itemName .. "'")
+		end
+		return
+	end
 	if action == "clear_inv"   then warn("[AdminRemote] clear_inv stub");   return end
 
 	-- ── INFORMATIONAL (client-side state only) ─────────────────────────────────
