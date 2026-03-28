@@ -488,6 +488,93 @@ local function attachDropdown(box, contentFrame)
 end
 
 -- =====================================================
+-- PREDEFINED ITEMS AUTOCOMPLETE DROPDOWN
+-- =====================================================
+local PREDEFINED_ITEMS = {
+	"wavecoins",
+}
+
+local function attachItemDropdown(box, contentFrame)
+	local function rebuildItemDrop(names)
+		local old = contentFrame:FindFirstChild("__ItemDrop")
+		if old then old:Destroy() end
+		if #names == 0 then return end
+		local dropW = box.AbsoluteSize.X
+		local dropH = math.min(#names, MAX_DD) * ITEM_H
+		local drop            = Instance.new("Frame")
+		drop.Name             = "__ItemDrop"
+		drop.Size             = UDim2.new(0, dropW, 0, 0)
+		local relX = box.AbsolutePosition.X - contentFrame.AbsolutePosition.X
+		local relY = box.AbsolutePosition.Y - contentFrame.AbsolutePosition.Y + box.AbsoluteSize.Y + 2
+		drop.Position         = UDim2.new(0, relX, 0, relY)
+		drop.BackgroundColor3 = C.dropBg
+		drop.BorderSizePixel  = 0
+		drop.ZIndex           = 30
+		drop.ClipsDescendants = true
+		drop.Parent           = contentFrame
+		mkCorner(drop, UDim.new(0,3)); mkStroke(drop, C.dropBdr, 1)
+		local layout = Instance.new("UIListLayout")
+		layout.SortOrder = Enum.SortOrder.LayoutOrder
+		layout.Padding   = UDim.new(0,0)
+		layout.Parent    = drop
+		for i, name in ipairs(names) do
+			if i > MAX_DD then break end
+			local row = Instance.new("TextButton")
+			row.Size             = UDim2.new(1,0,0,ITEM_H)
+			row.BackgroundColor3 = C.dropBg
+			row.Text             = name
+			row.TextColor3       = C.text
+			row.Font             = Enum.Font.Gotham
+			row.TextSize         = 12
+			row.TextXAlignment   = Enum.TextXAlignment.Left
+			row.AutoButtonColor  = false
+			row.LayoutOrder      = i
+			row.ZIndex           = 31
+			row.BorderSizePixel  = 0
+			row.Parent           = drop
+			local rp = Instance.new("UIPadding"); rp.PaddingLeft = UDim.new(0,8); rp.Parent = row
+			if i < math.min(#names, MAX_DD) then
+				local sep = Instance.new("Frame")
+				sep.Size             = UDim2.new(1,0,0,1)
+				sep.Position         = UDim2.new(0,0,1,-1)
+				sep.BackgroundColor3 = C.dropBdr
+				sep.BorderSizePixel  = 0
+				sep.ZIndex           = 32
+				sep.Parent           = row
+			end
+			row.MouseEnter:Connect(function() TweenService:Create(row,TF,{BackgroundColor3=C.dropHov}):Play() end)
+			row.MouseLeave:Connect(function() TweenService:Create(row,TF,{BackgroundColor3=C.dropBg}):Play() end)
+			row.MouseButton1Click:Connect(function()
+				box.Text = name
+				local d = contentFrame:FindFirstChild("__ItemDrop"); if d then d:Destroy() end
+			end)
+		end
+		TweenService:Create(drop, TweenInfo.new(0.10,Enum.EasingStyle.Quint,Enum.EasingDirection.Out),
+			{Size=UDim2.new(0,dropW,0,dropH)}):Play()
+	end
+	box:GetPropertyChangedSignal("Text"):Connect(function()
+		local q = box.Text:match("^%s*(.-)%s*$"):lower()
+		if q == "" then
+			local d = contentFrame:FindFirstChild("__ItemDrop"); if d then d:Destroy() end; return
+		end
+		local results = {}
+		for _, item in ipairs(PREDEFINED_ITEMS) do
+			if item:lower():sub(1,#q)==q then table.insert(results,item) end
+		end
+		table.sort(results)
+		if #results==0 or (#results==1 and results[1]:lower()==q) then
+			local d = contentFrame:FindFirstChild("__ItemDrop"); if d then d:Destroy() end; return
+		end
+		rebuildItemDrop(results)
+	end)
+	box.FocusLost:Connect(function()
+		task.delay(0.22, function()
+			local d = contentFrame:FindFirstChild("__ItemDrop"); if d then d:Destroy() end
+		end)
+	end)
+end
+
+-- =====================================================
 -- STATIC DROPDOWN (mod modal)
 -- =====================================================
 local function makeStaticDD(labelParent, overlayParent, options, defIdx, zBase)
@@ -1571,6 +1658,7 @@ do
 	itmInput.TextSize=13; itmInput.TextXAlignment=Enum.TextXAlignment.Center
 	itmInput.ClearTextOnFocus=false; itmInput.ZIndex=5; itmInput.Parent=page
 	mkCorner(itmInput,UDim.new(0,4)); mkStroke(itmInput,C.inputBdr,1)
+	attachItemDropdown(itmInput,page)
 
 	local HALF=math.floor((CW-6)/2)
 	mkBtn(page,"GIVE ITEM",C.btnGreen,C.btnGreenDk,HALF,36,PAD,146,function()
