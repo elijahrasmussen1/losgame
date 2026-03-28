@@ -170,3 +170,28 @@ spendCoinsEvent.OnServerEvent:Connect(function(player, amount)
 		warn("[FloodCoins]", player.Name, "tried to spend", amount, "but only has", getCoins(player))
 	end
 end)
+
+-- =====================================================
+-- ADMIN API  (BindableFunction for server-side scripts)
+-- AdminRemote uses this to give/get/set coins without
+-- being coupled to the internal ledger.
+-- =====================================================
+local waveCoinAdminAPI = Instance.new("BindableFunction")
+waveCoinAdminAPI.Name   = "WaveCoinAPIBindable"
+waveCoinAdminAPI.Parent = game:GetService("ServerStorage")
+
+waveCoinAdminAPI.OnInvoke = function(action, player, amount)
+	if action == "AddCoins" then
+		if not player then return nil end
+		addCoins(player, amount or 0)
+		return getCoins(player)
+	elseif action == "GetCoins" then
+		if not player then return nil end
+		return getCoins(player)
+	elseif action == "SetCoins" then
+		if not player then return nil end
+		setCoins(player, amount or 0)
+		return getCoins(player)
+	end
+	return nil
+end

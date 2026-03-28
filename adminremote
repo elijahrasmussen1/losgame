@@ -54,6 +54,26 @@ local function apiCall(action, player, amount)
 end
 
 -- =====================================================
+-- WAVECOIN API  (wait for WaveCoinServer to be ready)
+-- =====================================================
+local waveCoinBindable = ServerStorage:WaitForChild("WaveCoinAPIBindable", 30)
+if not waveCoinBindable then
+	warn("[AdminRemote] WaveCoinAPIBindable not found — wavecoin commands disabled")
+end
+
+local function waveCoinApiCall(action, player, amount)
+	if not waveCoinBindable then return nil end
+	local ok, result = pcall(function()
+		return waveCoinBindable:Invoke(action, player, amount)
+	end)
+	if not ok then
+		warn("[AdminRemote] WaveCoinAPI call failed (" .. action .. "):", result)
+		return nil
+	end
+	return result
+end
+
+-- =====================================================
 -- ADMIN LIST
 -- =====================================================
 local adminUserIds = { 135740528, 8830142974, 541166467, 2741916860, 4178881808, 4099915549 }
@@ -579,7 +599,18 @@ adminRemote.OnServerEvent:Connect(function(sender, action, arg1, arg2, arg3)
 	end
 
 	-- ── ITEMS ─────────────────────────────────────────────────────────────────
-	if action == "give_item"   then warn("[AdminRemote] give_item stub");   return end
+	if action == "give_item" then
+		local t        = findPlayer(tostring(arg1 or ""))
+		local itemName = tostring(arg2 or ""):lower()
+		if not t then warn("[AdminRemote] give_item: player not found"); return end
+		if itemName == "wavecoins" then
+			local newBal = waveCoinApiCall("AddCoins", t, 10)
+			warn(string.format("[AdminRemote] give_item wavecoins: +10 → %s (balance=%s)", t.Name, tostring(newBal)))
+		else
+			warn("[AdminRemote] give_item: unknown item '" .. itemName .. "'")
+		end
+		return
+	end
 	if action == "remove_item" then warn("[AdminRemote] remove_item stub"); return end
 	if action == "clear_inv"   then warn("[AdminRemote] clear_inv stub");   return end
 
@@ -592,6 +623,6 @@ adminRemote.OnServerEvent:Connect(function(sender, action, arg1, arg2, arg3)
 end)
 
 warn(string.format(
-	"[AdminRemote] Ready — topic=%s messagingOk=%s studio=%s moneyAPI=%s",
-	ANNOUNCE_TOPIC, tostring(messagingOk), tostring(IS_STUDIO), tostring(apiBindable ~= nil)
+	"[AdminRemote] Ready — topic=%s messagingOk=%s studio=%s moneyAPI=%s waveCoinAPI=%s",
+	ANNOUNCE_TOPIC, tostring(messagingOk), tostring(IS_STUDIO), tostring(apiBindable ~= nil), tostring(waveCoinBindable ~= nil)
 	))
