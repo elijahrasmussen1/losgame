@@ -1,0 +1,1859 @@
+-- AdminDashboard.client.lua
+-- made by elijxhraz — REVAMP IN PROGRESSSS
+-- Local in starter
+
+local Players           = game:GetService("Players")
+local TweenService      = game:GetService("TweenService")
+local UserInputService  = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService        = game:GetService("RunService")
+local SoundService      = game:GetService("SoundService")
+
+local player    = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+local camera    = workspace.CurrentCamera
+
+-- =====================================================
+-- ANNOUNCEMENT DISPLAY
+-- =====================================================
+local ANNOUNCE_AVATAR   = "rbxassetid://105356242505771"
+local ANNOUNCE_VERIFIED = "rbxassetid://110321931332059"
+local ANNOUNCE_SOUND    = "rbxassetid://112615009235618"
+
+local announceGui = Instance.new("ScreenGui")
+announceGui.Name           = "AdminAnnouncements"
+announceGui.ResetOnSpawn   = false
+announceGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+announceGui.IgnoreGuiInset = true
+announceGui.DisplayOrder   = 25
+announceGui.Parent         = playerGui
+
+local announceStack = Instance.new("Frame")
+announceStack.AnchorPoint            = Vector2.new(0.5, 0)
+announceStack.Size                   = UDim2.new(0.85, 0, 0, 300)
+announceStack.Position               = UDim2.new(0.5, 0, 0, 16)
+announceStack.BackgroundTransparency = 1
+announceStack.BorderSizePixel        = 0
+announceStack.Parent                 = announceGui
+
+local announceLayout = Instance.new("UIListLayout")
+announceLayout.SortOrder           = Enum.SortOrder.LayoutOrder
+announceLayout.Padding             = UDim.new(0, 4)
+announceLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+announceLayout.FillDirection       = Enum.FillDirection.Vertical
+announceLayout.Parent              = announceStack
+
+local announceCounter = 0
+
+local announceSound = Instance.new("Sound")
+announceSound.SoundId = ANNOUNCE_SOUND
+announceSound.Volume  = 0.8
+announceSound.Parent  = SoundService
+
+local function spawnAnnouncement(senderName, msg)
+	announceCounter += 1
+	announceSound:Stop()
+	announceSound:Play()
+
+	local row = Instance.new("Frame")
+	row.Name                   = "Announce_" .. announceCounter
+	row.BackgroundTransparency = 1
+	row.BorderSizePixel        = 0
+	row.AutomaticSize          = Enum.AutomaticSize.XY
+	row.LayoutOrder            = announceCounter
+	row.Parent                 = announceStack
+
+	local rowLayout = Instance.new("UIListLayout")
+	rowLayout.FillDirection       = Enum.FillDirection.Horizontal
+	rowLayout.VerticalAlignment   = Enum.VerticalAlignment.Center
+	rowLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	rowLayout.Padding             = UDim.new(0, 0)
+	rowLayout.SortOrder           = Enum.SortOrder.LayoutOrder
+	rowLayout.Parent              = row
+
+	local avatar = Instance.new("ImageLabel")
+	avatar.Name                   = "Avatar"
+	avatar.Size                   = UDim2.new(0, 28, 0, 28)
+	avatar.BackgroundTransparency = 1
+	avatar.Image                  = ANNOUNCE_AVATAR
+	avatar.ScaleType              = Enum.ScaleType.Fit
+	avatar.ImageTransparency      = 1
+	avatar.LayoutOrder            = 1
+	avatar.Parent                 = row
+
+	local gap1 = Instance.new("Frame")
+	gap1.Size                   = UDim2.new(0, 6, 0, 1)
+	gap1.BackgroundTransparency = 1
+	gap1.LayoutOrder            = 2
+	gap1.Parent                 = row
+
+	local nameLabel = Instance.new("TextLabel")
+	nameLabel.Name                   = "NameLabel"
+	nameLabel.AutomaticSize          = Enum.AutomaticSize.XY
+	nameLabel.BackgroundTransparency = 1
+	nameLabel.Text                   = senderName
+	nameLabel.TextColor3             = Color3.fromRGB(255, 255, 255)
+	nameLabel.TextTransparency       = 1
+	nameLabel.Font                   = Enum.Font.GothamBlack
+	nameLabel.TextSize               = 22
+	nameLabel.LayoutOrder            = 3
+	nameLabel.Parent                 = row
+
+	local nameStroke = Instance.new("UIStroke")
+	nameStroke.Color           = Color3.fromRGB(0, 0, 0)
+	nameStroke.Thickness       = 3
+	nameStroke.Transparency    = 1
+	nameStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
+	nameStroke.Parent          = nameLabel
+
+	local gap2 = Instance.new("Frame")
+	gap2.Size                   = UDim2.new(0, 4, 0, 1)
+	gap2.BackgroundTransparency = 1
+	gap2.LayoutOrder            = 4
+	gap2.Parent                 = row
+
+	local verified = Instance.new("ImageLabel")
+	verified.Name                   = "Verified"
+	verified.Size                   = UDim2.new(0, 20, 0, 20)
+	verified.BackgroundTransparency = 1
+	verified.Image                  = ANNOUNCE_VERIFIED
+	verified.ScaleType              = Enum.ScaleType.Fit
+	verified.ImageTransparency      = 1
+	verified.LayoutOrder            = 5
+	verified.Parent                 = row
+
+	local msgLabel = Instance.new("TextLabel")
+	msgLabel.Name                   = "MsgLabel"
+	msgLabel.AutomaticSize          = Enum.AutomaticSize.XY
+	msgLabel.BackgroundTransparency = 1
+	msgLabel.Text                   = ": " .. msg
+	msgLabel.TextColor3             = Color3.fromRGB(255, 255, 255)
+	msgLabel.TextTransparency       = 1
+	msgLabel.Font                   = Enum.Font.GothamBold
+	msgLabel.TextSize               = 22
+	msgLabel.LayoutOrder            = 6
+	msgLabel.Parent                 = row
+
+	local msgStroke = Instance.new("UIStroke")
+	msgStroke.Color           = Color3.fromRGB(0, 0, 0)
+	msgStroke.Thickness       = 3
+	msgStroke.Transparency    = 1
+	msgStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
+	msgStroke.Parent          = msgLabel
+
+	local fadeIn = TweenInfo.new(0.35, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+	TweenService:Create(avatar,     fadeIn, {ImageTransparency = 0}):Play()
+	TweenService:Create(nameLabel,  fadeIn, {TextTransparency  = 0}):Play()
+	TweenService:Create(nameStroke, fadeIn, {Transparency      = 0}):Play()
+	TweenService:Create(verified,   fadeIn, {ImageTransparency = 0}):Play()
+	TweenService:Create(msgLabel,   fadeIn, {TextTransparency  = 0}):Play()
+	TweenService:Create(msgStroke,  fadeIn, {Transparency      = 0}):Play()
+
+	task.delay(5.0, function()
+		local fadeOut = TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+		TweenService:Create(avatar,     fadeOut, {ImageTransparency = 1}):Play()
+		TweenService:Create(nameLabel,  fadeOut, {TextTransparency  = 1}):Play()
+		TweenService:Create(nameStroke, fadeOut, {Transparency      = 1}):Play()
+		TweenService:Create(verified,   fadeOut, {ImageTransparency = 1}):Play()
+		TweenService:Create(msgLabel,   fadeOut, {TextTransparency  = 1}):Play()
+		TweenService:Create(msgStroke,  fadeOut, {Transparency      = 1}):Play()
+		task.wait(0.65)
+		if row and row.Parent then row:Destroy() end
+	end)
+end
+
+local announceRemote = ReplicatedStorage:WaitForChild("AdminAnnounceRemote", 30)
+if announceRemote then
+	announceRemote.OnClientEvent:Connect(function(n, m)
+		local ok, err = pcall(spawnAnnouncement, n, m)
+		if not ok then warn("[AdminDashboard] spawnAnnouncement error: " .. tostring(err)) end
+	end)
+else
+	warn("[AdminDashboard] AdminAnnounceRemote not found!")
+end
+
+-- =====================================================
+-- ADMIN GUARD
+-- =====================================================
+local adminUserIds = {135740528, 8830142974, 541166467, 2741916860, 4178881808, 4099915549}
+local function isAdmin()
+	if player.UserId < 0 then return true end
+	for _, id in ipairs(adminUserIds) do
+		if player.UserId == id then return true end
+	end
+	return false
+end
+if not isAdmin() then return end
+if playerGui:FindFirstChild("AdminDashboard") then return end
+
+-- =====================================================
+-- REMOTE EVENT
+-- =====================================================
+local adminRemote = ReplicatedStorage:WaitForChild("AdminRemote", 30)
+if not adminRemote then warn("[AdminDashboard] AdminRemote not found!"); return end
+
+-- =====================================================
+-- COLOURS
+-- =====================================================
+local C = {
+	winBg         = Color3.fromRGB(10,  14,  14),
+	winBorder     = Color3.fromRGB(0,   220, 200),
+	headerBg      = Color3.fromRGB(18,  26,  26),
+	tabOn         = Color3.fromRGB(0,   220, 200),
+	tabOff        = Color3.fromRGB(14,  20,  20),
+	tabOnTxt      = Color3.fromRGB(8,   13,  13),
+	tabOffTxt     = Color3.fromRGB(130, 142, 142),
+	contentBg     = Color3.fromRGB(10,  14,  14),
+	labelCol      = Color3.fromRGB(0,   220, 200),
+	inputBg       = Color3.fromRGB(16,  22,  22),
+	inputBdr      = Color3.fromRGB(42,  58,  58),
+	inputText     = Color3.fromRGB(215, 220, 220),
+	phCol         = Color3.fromRGB(70,  85,  85),
+	btnRed        = Color3.fromRGB(168, 26,  26),
+	btnRedDk      = Color3.fromRGB(124, 14,  14),
+	btnGreen      = Color3.fromRGB(22,  110, 36),
+	btnGreenDk    = Color3.fromRGB(14,  80,  24),
+	btnCyan       = Color3.fromRGB(0,   142, 132),
+	btnCyanDk     = Color3.fromRGB(0,   102, 95),
+	btnOlive      = Color3.fromRGB(110, 90,  12),
+	btnOliveDk    = Color3.fromRGB(80,  65,  7),
+	btnPurple     = Color3.fromRGB(100, 28,  158),
+	btnPurpleDk   = Color3.fromRGB(72,  18,  116),
+	btnOrange     = Color3.fromRGB(168, 78,  14),
+	btnOrangeDk   = Color3.fromRGB(122, 55,  7),
+	glbOn         = Color3.fromRGB(22,  110, 36),
+	glbOff        = Color3.fromRGB(168, 26,  26),
+	closeBg       = Color3.fromRGB(168, 26,  26),
+	closeHov      = Color3.fromRGB(200, 38,  38),
+	white         = Color3.fromRGB(255, 255, 255),
+	text          = Color3.fromRGB(185, 194, 194),
+	textDim       = Color3.fromRGB(100, 115, 115),
+	black         = Color3.fromRGB(0,   0,   0),
+	dropBg        = Color3.fromRGB(10,  15,  15),
+	dropHov       = Color3.fromRGB(18,  26,  26),
+	dropBdr       = Color3.fromRGB(32,  46,  46),
+	toastBg       = Color3.fromRGB(18,  6,   6),
+	toastTxt      = Color3.fromRGB(205, 90,  90),
+	toastBdr      = Color3.fromRGB(75,  22,  22),
+	modBg         = Color3.fromRGB(10,  14,  14),
+	modInputBg    = Color3.fromRGB(14,  20,  20),
+	flyBtn        = Color3.fromRGB(48,  84,  200),
+	flyBtnDk      = Color3.fromRGB(34,  60,  148),
+	hudBg         = Color3.fromRGB(10,  14,  14),
+	fuseMachine   = Color3.fromRGB(100, 28,  158),
+	fuseMachineDk = Color3.fromRGB(72,  18,  116),
+	banLogRow     = Color3.fromRGB(14,  20,  20),
+	banLogAlt     = Color3.fromRGB(18,  26,  26),
+	banPerm       = Color3.fromRGB(168, 26,  26),
+	banTemp       = Color3.fromRGB(110, 90,  12),
+}
+
+-- =====================================================
+-- DIMENSIONS
+-- =====================================================
+local WIN_W = 680
+local WIN_H = 480
+local HDR_H = 52
+local TAB_H = 40
+local PAD   = 14
+local TAB_W = 110
+
+-- =====================================================
+-- TWEEN PRESETS
+-- =====================================================
+local TF = TweenInfo.new(0.10, Enum.EasingStyle.Quad,  Enum.EasingDirection.Out)
+local TO = TweenInfo.new(0.22, Enum.EasingStyle.Back,  Enum.EasingDirection.Out)
+local TC = TweenInfo.new(0.15, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+
+-- =====================================================
+-- SCREEN GUI
+-- =====================================================
+local screenGui          = Instance.new("ScreenGui")
+screenGui.Name           = "AdminDashboard"
+screenGui.ResetOnSpawn   = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+screenGui.IgnoreGuiInset = true
+screenGui.DisplayOrder   = 15
+screenGui.Parent         = playerGui
+
+-- =====================================================
+-- FORWARD DECLARATIONS
+-- =====================================================
+local showFeedback, showToast
+
+-- =====================================================
+-- TOAST NOTIFICATION
+-- =====================================================
+local toastLabel = Instance.new("TextLabel")
+toastLabel.Size                   = UDim2.new(0, 440, 0, 36)
+toastLabel.AnchorPoint            = Vector2.new(0.5, 1)
+toastLabel.Position               = UDim2.new(0.5, 0, 1, -14)
+toastLabel.BackgroundColor3       = C.toastBg
+toastLabel.BackgroundTransparency = 1
+toastLabel.Text                   = ""
+toastLabel.TextColor3             = C.toastTxt
+toastLabel.Font                   = Enum.Font.GothamBold
+toastLabel.TextSize               = 13
+toastLabel.ZIndex                 = 40
+toastLabel.Parent                 = screenGui
+do
+	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0,4); c.Parent = toastLabel
+	local s = Instance.new("UIStroke"); s.Thickness = 1.5; s.Color = C.toastBdr; s.Parent = toastLabel
+	local p = Instance.new("UIPadding")
+	p.PaddingLeft = UDim.new(0,12); p.PaddingRight = UDim.new(0,12); p.Parent = toastLabel
+end
+local toastStroke = toastLabel:FindFirstChildOfClass("UIStroke")
+local toastThr
+
+showToast = function(msg)
+	toastLabel.Text             = msg
+	toastLabel.TextColor3       = C.toastTxt
+	toastLabel.BackgroundColor3 = C.toastBg
+	toastStroke.Color           = C.toastBdr
+	TweenService:Create(toastLabel, TweenInfo.new(0.14), {BackgroundTransparency = 0.05}):Play()
+	if toastThr then task.cancel(toastThr) end
+	toastThr = task.delay(2.5, function()
+		TweenService:Create(toastLabel, TweenInfo.new(0.45), {BackgroundTransparency = 1}):Play()
+		task.wait(0.5); toastLabel.Text = ""
+	end)
+end
+
+showFeedback = function(msg)
+	toastLabel.Text             = "✓  " .. msg
+	toastLabel.TextColor3       = Color3.fromRGB(75, 205, 115)
+	toastLabel.BackgroundColor3 = Color3.fromRGB(5, 16, 8)
+	toastStroke.Color           = Color3.fromRGB(24, 80, 38)
+	TweenService:Create(toastLabel, TweenInfo.new(0.14), {BackgroundTransparency = 0.05}):Play()
+	if toastThr then task.cancel(toastThr) end
+	toastThr = task.delay(2.5, function()
+		TweenService:Create(toastLabel, TweenInfo.new(0.45), {BackgroundTransparency = 1}):Play()
+		task.wait(0.5); toastLabel.Text = ""
+	end)
+end
+
+-- =====================================================
+-- HELPERS
+-- =====================================================
+local function mkCorner(p, r)
+	local c = Instance.new("UICorner")
+	c.CornerRadius = r or UDim.new(0, 4)
+	c.Parent = p
+	return c
+end
+
+local function mkStroke(p, col, th)
+	local s = Instance.new("UIStroke")
+	s.Color           = col or C.inputBdr
+	s.Thickness       = th or 1
+	s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	s.Parent          = p
+	return s
+end
+
+local function mkBtn(parent, lbl, bg, bgDk, w, h, xPos, yPos, cb)
+	local btn                    = Instance.new("TextButton")
+	btn.Size                     = UDim2.new(0, w, 0, h)
+	btn.Position                 = UDim2.new(0, xPos, 0, yPos)
+	btn.BackgroundColor3         = bg
+	btn.Text                     = lbl
+	btn.TextColor3               = C.white
+	btn.Font                     = Enum.Font.GothamBold
+	btn.TextSize                 = 12
+	btn.AutoButtonColor          = false
+	btn.BorderSizePixel          = 0
+	btn.TextStrokeColor3         = C.black
+	btn.TextStrokeTransparency   = 0.65
+	btn.Parent                   = parent
+	mkCorner(btn, UDim.new(0, 4))
+	local isDown = false
+	btn.MouseEnter:Connect(function()
+		if not isDown then TweenService:Create(btn, TF, {BackgroundColor3 = bgDk}):Play() end
+	end)
+	btn.MouseLeave:Connect(function()
+		isDown = false
+		TweenService:Create(btn, TF, {BackgroundColor3 = bg}):Play()
+	end)
+	btn.MouseButton1Down:Connect(function()
+		isDown = true
+		btn.BackgroundColor3 = Color3.fromRGB(
+			math.max(bgDk.R*255-20,0), math.max(bgDk.G*255-20,0), math.max(bgDk.B*255-20,0))
+	end)
+	btn.MouseButton1Up:Connect(function()
+		isDown = false
+		TweenService:Create(btn, TF, {BackgroundColor3 = bg}):Play()
+		if cb then task.spawn(cb) end
+	end)
+	return btn
+end
+
+local function mkSectionLabel(parent, text, yPos)
+	local lbl                    = Instance.new("TextLabel")
+	lbl.Size                     = UDim2.new(1, -PAD*2, 0, 20)
+	lbl.Position                 = UDim2.new(0, PAD, 0, yPos)
+	lbl.BackgroundTransparency   = 1
+	lbl.Text                     = text
+	lbl.TextColor3               = C.labelCol
+	lbl.Font                     = Enum.Font.GothamBold
+	lbl.TextSize                 = 13
+	lbl.TextXAlignment           = Enum.TextXAlignment.Center
+	lbl.ZIndex                   = 5
+	lbl.Parent                   = parent
+	return lbl
+end
+
+-- =====================================================
+-- PLAYER NAME AUTOCOMPLETE DROPDOWN
+-- =====================================================
+local ITEM_H = 24
+local MAX_DD = 6
+
+local function attachDropdown(box, contentFrame)
+	local function rebuildDrop(names)
+		local old = contentFrame:FindFirstChild("__PlayerDrop")
+		if old then old:Destroy() end
+		if #names == 0 then return end
+		local dropW = box.AbsoluteSize.X
+		local dropH = math.min(#names, MAX_DD) * ITEM_H
+		local drop            = Instance.new("Frame")
+		drop.Name             = "__PlayerDrop"
+		drop.Size             = UDim2.new(0, dropW, 0, 0)
+		local relX = box.AbsolutePosition.X - contentFrame.AbsolutePosition.X
+		local relY = box.AbsolutePosition.Y - contentFrame.AbsolutePosition.Y + box.AbsoluteSize.Y + 2
+		drop.Position         = UDim2.new(0, relX, 0, relY)
+		drop.BackgroundColor3 = C.dropBg
+		drop.BorderSizePixel  = 0
+		drop.ZIndex           = 30
+		drop.ClipsDescendants = true
+		drop.Parent           = contentFrame
+		mkCorner(drop, UDim.new(0,3)); mkStroke(drop, C.dropBdr, 1)
+		local layout = Instance.new("UIListLayout")
+		layout.SortOrder = Enum.SortOrder.LayoutOrder
+		layout.Padding   = UDim.new(0,0)
+		layout.Parent    = drop
+		for i, name in ipairs(names) do
+			if i > MAX_DD then break end
+			local row = Instance.new("TextButton")
+			row.Size             = UDim2.new(1,0,0,ITEM_H)
+			row.BackgroundColor3 = C.dropBg
+			row.Text             = name
+			row.TextColor3       = C.text
+			row.Font             = Enum.Font.Gotham
+			row.TextSize         = 12
+			row.TextXAlignment   = Enum.TextXAlignment.Left
+			row.AutoButtonColor  = false
+			row.LayoutOrder      = i
+			row.ZIndex           = 31
+			row.BorderSizePixel  = 0
+			row.Parent           = drop
+			local rp = Instance.new("UIPadding"); rp.PaddingLeft = UDim.new(0,8); rp.Parent = row
+			if i < math.min(#names, MAX_DD) then
+				local sep = Instance.new("Frame")
+				sep.Size             = UDim2.new(1,0,0,1)
+				sep.Position         = UDim2.new(0,0,1,-1)
+				sep.BackgroundColor3 = C.dropBdr
+				sep.BorderSizePixel  = 0
+				sep.ZIndex           = 32
+				sep.Parent           = row
+			end
+			row.MouseEnter:Connect(function() TweenService:Create(row,TF,{BackgroundColor3=C.dropHov}):Play() end)
+			row.MouseLeave:Connect(function() TweenService:Create(row,TF,{BackgroundColor3=C.dropBg}):Play() end)
+			row.MouseButton1Click:Connect(function()
+				box.Text = name
+				local d = contentFrame:FindFirstChild("__PlayerDrop"); if d then d:Destroy() end
+			end)
+		end
+		TweenService:Create(drop, TweenInfo.new(0.10,Enum.EasingStyle.Quint,Enum.EasingDirection.Out),
+			{Size=UDim2.new(0,dropW,0,dropH)}):Play()
+	end
+	box:GetPropertyChangedSignal("Text"):Connect(function()
+		local q = box.Text:match("^%s*(.-)%s*$"):lower()
+		if q == "" then
+			local d = contentFrame:FindFirstChild("__PlayerDrop"); if d then d:Destroy() end; return
+		end
+		local results = {}
+		for _, p in ipairs(Players:GetPlayers()) do
+			if q=="all" or p.Name:lower():sub(1,#q)==q then table.insert(results,p.Name) end
+		end
+		table.sort(results)
+		if #results==0 or (#results==1 and results[1]:lower()==q) then
+			local d = contentFrame:FindFirstChild("__PlayerDrop"); if d then d:Destroy() end; return
+		end
+		rebuildDrop(results)
+	end)
+	box.FocusLost:Connect(function()
+		task.delay(0.22, function()
+			local d = contentFrame:FindFirstChild("__PlayerDrop"); if d then d:Destroy() end
+		end)
+	end)
+end
+
+-- =====================================================
+-- STATIC DROPDOWN (mod modal)
+-- =====================================================
+local function makeStaticDD(labelParent, overlayParent, options, defIdx, zBase)
+	zBase = zBase or 90
+	local chosen = options[defIdx] or options[1]
+	local btn = Instance.new("TextButton")
+	btn.Size             = UDim2.new(1,0,0,34); btn.Position = UDim2.new(0,0,0,18)
+	btn.BackgroundColor3 = C.modInputBg; btn.Text = chosen; btn.TextColor3 = C.text
+	btn.Font             = Enum.Font.Gotham; btn.TextSize = 13; btn.AutoButtonColor = false
+	btn.ZIndex           = zBase; btn.BorderSizePixel = 0; btn.Parent = labelParent
+	mkCorner(btn,UDim.new(0,4)); mkStroke(btn,C.inputBdr,1)
+	local arrow = Instance.new("TextLabel")
+	arrow.Size = UDim2.new(0,20,1,0); arrow.Position = UDim2.new(1,-22,0,0)
+	arrow.BackgroundTransparency = 1; arrow.Text = "▾"; arrow.TextColor3 = C.winBorder
+	arrow.Font = Enum.Font.GothamBold; arrow.TextSize = 12
+	arrow.TextXAlignment = Enum.TextXAlignment.Center; arrow.ZIndex = zBase+1; arrow.Parent = btn
+	local drop = Instance.new("Frame"); drop.Name = "StaticDrop"
+	drop.Size = UDim2.new(0,388,0,0); drop.BackgroundColor3 = C.dropBg
+	drop.BorderSizePixel = 0; drop.Visible = false; drop.ZIndex = zBase+20
+	drop.ClipsDescendants = true; drop.Parent = overlayParent
+	mkCorner(drop,UDim.new(0,3)); mkStroke(drop,C.dropBdr,1)
+	local dl = Instance.new("UIListLayout"); dl.SortOrder = Enum.SortOrder.LayoutOrder
+	dl.Padding = UDim.new(0,0); dl.Parent = drop
+	local isOpen = false; local closing = false
+	local function closeDrop()
+		if closing then return end; closing = true
+		TweenService:Create(drop,TweenInfo.new(0.10),{Size=UDim2.new(0,388,0,0)}):Play()
+		task.delay(0.12,function() drop.Visible=false; isOpen=false; closing=false end)
+	end
+	local function openDrop()
+		local ap=btn.AbsolutePosition; local as=btn.AbsoluteSize; local tH=#options*ITEM_H
+		drop.Size=UDim2.new(0,as.X,0,0); drop.Position=UDim2.new(0,ap.X,0,ap.Y+as.Y+2)
+		drop.Visible=true
+		TweenService:Create(drop,TweenInfo.new(0.12,Enum.EasingStyle.Quint,Enum.EasingDirection.Out),
+			{Size=UDim2.new(0,as.X,0,tH)}):Play()
+		isOpen=true
+	end
+	for i,opt in ipairs(options) do
+		local row=Instance.new("TextButton"); row.Size=UDim2.new(1,0,0,ITEM_H)
+		row.BackgroundColor3=C.dropBg; row.Text=opt; row.TextColor3=C.text
+		row.Font=Enum.Font.Gotham; row.TextSize=12; row.TextXAlignment=Enum.TextXAlignment.Left
+		row.AutoButtonColor=false; row.LayoutOrder=i; row.ZIndex=zBase+21
+		row.BorderSizePixel=0; row.Parent=drop
+		local rp=Instance.new("UIPadding"); rp.PaddingLeft=UDim.new(0,8); rp.Parent=row
+		if i<#options then
+			local sep=Instance.new("Frame"); sep.Size=UDim2.new(1,0,0,1)
+			sep.Position=UDim2.new(0,0,1,-1); sep.BackgroundColor3=C.dropBdr
+			sep.BorderSizePixel=0; sep.ZIndex=zBase+22; sep.Parent=row
+		end
+		row.MouseEnter:Connect(function() TweenService:Create(row,TF,{BackgroundColor3=C.dropHov}):Play() end)
+		row.MouseLeave:Connect(function() TweenService:Create(row,TF,{BackgroundColor3=C.dropBg}):Play() end)
+		row.MouseButton1Click:Connect(function() chosen=opt; btn.Text=opt; closeDrop() end)
+	end
+	btn.MouseButton1Click:Connect(function() if isOpen then closeDrop() else openDrop() end end)
+	UserInputService.InputBegan:Connect(function(inp)
+		if isOpen and inp.UserInputType==Enum.UserInputType.MouseButton1 then
+			task.defer(function() if isOpen then closeDrop() end end)
+		end
+	end)
+	return btn, drop, function() return chosen end
+end
+
+-- =====================================================
+-- SUFFIX PARSER
+-- =====================================================
+local SUFFIXES = {k=1e3,m=1e6,b=1e9,t=1e12,q=1e15,qn=1e18}
+local function parseAmount(str)
+	if not str or str=="" then return nil end
+	str = string.lower(str:match("^%s*(.-)%s*$"))
+	local plain = tonumber(str); if plain then return math.floor(plain) end
+	local num,suffix = str:match("^([%d%.]+)([a-z]+)$")
+	if num and suffix and SUFFIXES[suffix] then return math.floor(tonumber(num)*SUFFIXES[suffix]) end
+	return nil
+end
+
+-- =====================================================
+-- FREE CAM
+-- =====================================================
+local freeCamActive=false; local freeCamConn=nil; local freeCamMouseConn=nil
+local freeCamHint=nil; local savedCamType=nil; local freeCamSpeed=30
+local freeCamKeys={w=false,a=false,s=false,d=false,e=false}
+local freeCamYaw=0; local freeCamPitch=0; local freeCamPos=Vector3.zero
+
+local function stopFreeCam()
+	if not freeCamActive then return end; freeCamActive=false
+	if freeCamConn then freeCamConn:Disconnect(); freeCamConn=nil end
+	if freeCamMouseConn then freeCamMouseConn:Disconnect(); freeCamMouseConn=nil end
+	camera.CameraType = savedCamType or Enum.CameraType.Custom
+	local char=player.Character
+	if char then
+		local hum=char:FindFirstChildOfClass("Humanoid")
+		local root=char:FindFirstChild("HumanoidRootPart")
+		if hum then hum.WalkSpeed=16; hum.JumpPower=50; hum.PlatformStand=false end
+		if root then camera.CFrame=CFrame.new(root.Position+Vector3.new(0,2,5),root.Position) end
+	end
+	UserInputService.MouseBehavior=Enum.MouseBehavior.Default
+	for k in pairs(freeCamKeys) do freeCamKeys[k]=false end
+	if freeCamHint and freeCamHint.Parent then
+		TweenService:Create(freeCamHint,TweenInfo.new(0.3),{BackgroundTransparency=1}):Play()
+		task.delay(0.35,function()
+			if freeCamHint and freeCamHint.Parent then freeCamHint:Destroy(); freeCamHint=nil end
+		end)
+	end
+	showFeedback("Free cam OFF")
+end
+
+local function startFreeCam()
+	if freeCamActive then return end; freeCamActive=true
+	savedCamType=camera.CameraType; camera.CameraType=Enum.CameraType.Scriptable
+	local char=player.Character
+	if char then
+		local hum=char:FindFirstChildOfClass("Humanoid")
+		if hum then hum.WalkSpeed=0; hum.JumpPower=0; hum.PlatformStand=true end
+	end
+	local cf=camera.CFrame; freeCamPos=cf.Position; local look=cf.LookVector
+	freeCamYaw=math.atan2(-look.X,-look.Z); freeCamPitch=math.asin(math.clamp(look.Y,-1,1))
+	UserInputService.MouseBehavior=Enum.MouseBehavior.LockCenter
+	freeCamHint=Instance.new("TextLabel"); freeCamHint.Size=UDim2.new(0,500,0,32)
+	freeCamHint.AnchorPoint=Vector2.new(0.5,0); freeCamHint.Position=UDim2.new(0.5,0,0,10)
+	freeCamHint.BackgroundColor3=C.winBg; freeCamHint.BackgroundTransparency=0.10
+	freeCamHint.Text="FREE CAM  —  Mouse=look  |  WASD=move  |  E=up  |  Q=exit"
+	freeCamHint.TextColor3=C.winBorder; freeCamHint.Font=Enum.Font.GothamBold
+	freeCamHint.TextSize=12; freeCamHint.ZIndex=30; freeCamHint.Parent=screenGui
+	mkCorner(freeCamHint,UDim.new(0,4)); mkStroke(freeCamHint,C.winBorder,1.5)
+	freeCamMouseConn=UserInputService.InputChanged:Connect(function(inp)
+		if not freeCamActive then return end
+		if inp.UserInputType==Enum.UserInputType.MouseMovement then
+			freeCamYaw=freeCamYaw-inp.Delta.X*0.003
+			freeCamPitch=math.clamp(freeCamPitch-inp.Delta.Y*0.003,-math.pi/2+0.05,math.pi/2-0.05)
+		end
+	end)
+	freeCamConn=RunService.Heartbeat:Connect(function(dt)
+		if not freeCamActive then return end
+		local rotCF=CFrame.Angles(0,freeCamYaw,0)*CFrame.Angles(freeCamPitch,0,0)
+		local lv=rotCF.LookVector; local rv=rotCF.RightVector; local mv=Vector3.zero
+		if freeCamKeys.w then mv+=lv end; if freeCamKeys.s then mv-=lv end
+		if freeCamKeys.d then mv+=rv end; if freeCamKeys.a then mv-=rv end
+		if freeCamKeys.e then mv+=Vector3.new(0,1,0) end
+		if mv.Magnitude>0 then freeCamPos+=mv.Unit*freeCamSpeed*dt end
+		camera.CFrame=CFrame.new(freeCamPos)*rotCF
+	end)
+	showFeedback("Free cam ON — Q to exit")
+end
+
+UserInputService.InputBegan:Connect(function(inp,gpe)
+	if gpe then return end; if not freeCamActive then return end
+	local k=inp.KeyCode
+	if k==Enum.KeyCode.W then freeCamKeys.w=true
+	elseif k==Enum.KeyCode.A then freeCamKeys.a=true
+	elseif k==Enum.KeyCode.S then freeCamKeys.s=true
+	elseif k==Enum.KeyCode.D then freeCamKeys.d=true
+	elseif k==Enum.KeyCode.E then freeCamKeys.e=true
+	elseif k==Enum.KeyCode.Q then stopFreeCam() end
+end)
+UserInputService.InputEnded:Connect(function(inp)
+	if not freeCamActive then return end; local k=inp.KeyCode
+	if k==Enum.KeyCode.W then freeCamKeys.w=false
+	elseif k==Enum.KeyCode.A then freeCamKeys.a=false
+	elseif k==Enum.KeyCode.S then freeCamKeys.s=false
+	elseif k==Enum.KeyCode.D then freeCamKeys.d=false
+	elseif k==Enum.KeyCode.E then freeCamKeys.e=false end
+end)
+
+-- =====================================================
+-- FLY SYSTEM
+-- =====================================================
+local flyEnabled=false; local flySpd=50
+local flyBodyVel=nil; local flyBodyGyro=nil; local flyConn=nil
+local flyKeys={w=false,a=false,s=false,d=false}
+
+local function getCharParts()
+	local char=player.Character; if not char then return nil,nil,nil end
+	return char,char:FindFirstChild("HumanoidRootPart"),char:FindFirstChildOfClass("Humanoid")
+end
+
+local flyStatusLbl=nil
+local flyTogBtn=nil
+
+local function enableFly()
+	local _,root,hum=getCharParts(); if not root or not hum then return end
+	flyEnabled=true; hum.PlatformStand=true
+	flyBodyVel=Instance.new("BodyVelocity"); flyBodyVel.MaxForce=Vector3.new(1e6,1e6,1e6)
+	flyBodyVel.Velocity=Vector3.zero; flyBodyVel.Parent=root
+	flyBodyGyro=Instance.new("BodyGyro"); flyBodyGyro.MaxTorque=Vector3.new(1e6,1e6,1e6)
+	flyBodyGyro.P=1e5; flyBodyGyro.D=500; flyBodyGyro.CFrame=root.CFrame; flyBodyGyro.Parent=root
+	flyConn=RunService.Heartbeat:Connect(function()
+		local _,r2,_=getCharParts(); if not r2 or not flyEnabled then return end
+		local cf=camera.CFrame; local lv=cf.LookVector; local rv=cf.RightVector
+		local dir=Vector3.zero
+		if flyKeys.w then dir+=lv end; if flyKeys.s then dir-=lv end
+		if flyKeys.d then dir+=rv end; if flyKeys.a then dir-=rv end
+		if dir.Magnitude>0 then dir=dir.Unit end
+		if flyBodyVel and flyBodyVel.Parent then
+			flyBodyVel.Velocity=flyBodyVel.Velocity:Lerp(dir*flySpd,0.20)
+		end
+		local ff=Vector3.new(lv.X,0,lv.Z)
+		if flyBodyGyro and flyBodyGyro.Parent and ff.Magnitude>0.01 then
+			flyBodyGyro.CFrame=CFrame.new(r2.Position,r2.Position+ff.Unit)
+		end
+	end)
+end
+
+local function disableFly()
+	flyEnabled=false
+	if flyConn then flyConn:Disconnect(); flyConn=nil end
+	if flyBodyVel and flyBodyVel.Parent then flyBodyVel:Destroy() end; flyBodyVel=nil
+	if flyBodyGyro and flyBodyGyro.Parent then flyBodyGyro:Destroy() end; flyBodyGyro=nil
+	local _,_,hum=getCharParts(); if hum then hum.PlatformStand=false end
+end
+
+UserInputService.InputBegan:Connect(function(inp,gpe)
+	if gpe or freeCamActive then return end; local k=inp.KeyCode
+	if k==Enum.KeyCode.W then flyKeys.w=true
+	elseif k==Enum.KeyCode.A then flyKeys.a=true
+	elseif k==Enum.KeyCode.S then flyKeys.s=true
+	elseif k==Enum.KeyCode.D then flyKeys.d=true
+	elseif k==Enum.KeyCode.E and flyEnabled then
+		disableFly()
+		if flyStatusLbl then flyStatusLbl.Text='<font color="rgb(135,145,145)">Status:</font>  <font color="rgb(215,55,55)"><b>Off</b></font>' end
+		if flyTogBtn then flyTogBtn.Text="ENABLE FLY"; flyTogBtn.BackgroundColor3=C.flyBtn end
+		showFeedback("Fly OFF (key E)")
+	end
+end)
+UserInputService.InputEnded:Connect(function(inp)
+	if freeCamActive then return end; local k=inp.KeyCode
+	if k==Enum.KeyCode.W then flyKeys.w=false
+	elseif k==Enum.KeyCode.A then flyKeys.a=false
+	elseif k==Enum.KeyCode.S then flyKeys.s=false
+	elseif k==Enum.KeyCode.D then flyKeys.d=false end
+end)
+player.CharacterAdded:Connect(function()
+	flyEnabled=false; flyBodyVel=nil; flyBodyGyro=nil
+	if flyConn then flyConn:Disconnect(); flyConn=nil end
+	for k in pairs(flyKeys) do flyKeys[k]=false end
+	if freeCamActive then stopFreeCam() end
+end)
+
+-- =====================================================
+-- MODERATION MODAL GUI
+-- =====================================================
+local modGuiSG=Instance.new("ScreenGui")
+modGuiSG.Name="AdminModGui"; modGuiSG.ResetOnSpawn=false
+modGuiSG.ZIndexBehavior=Enum.ZIndexBehavior.Sibling; modGuiSG.IgnoreGuiInset=true
+modGuiSG.Enabled=false; modGuiSG.DisplayOrder=20; modGuiSG.Parent=playerGui
+
+local modOverlay=Instance.new("Frame"); modOverlay.Size=UDim2.new(1,0,1,0)
+modOverlay.BackgroundColor3=Color3.fromRGB(0,0,0); modOverlay.BackgroundTransparency=0.50
+modOverlay.BorderSizePixel=0; modOverlay.ZIndex=80; modOverlay.Parent=modGuiSG
+
+local modWindow=Instance.new("Frame"); modWindow.Name="ModWindow"
+modWindow.AnchorPoint=Vector2.new(0.5,0.5); modWindow.Size=UDim2.new(0,430,0,350)
+modWindow.Position=UDim2.new(0.5,0,0.5,0); modWindow.BackgroundColor3=C.modBg
+modWindow.BorderSizePixel=0; modWindow.ZIndex=81; modWindow.Parent=modGuiSG
+mkCorner(modWindow,UDim.new(0,5)); mkStroke(modWindow,C.winBorder,2)
+
+local modHdr=Instance.new("Frame"); modHdr.Name="Header"
+modHdr.Size=UDim2.new(1,0,0,48); modHdr.BackgroundColor3=C.headerBg
+modHdr.BorderSizePixel=0; modHdr.ZIndex=82; modHdr.Parent=modWindow
+mkCorner(modHdr,UDim.new(0,5))
+local mhP=Instance.new("Frame"); mhP.Size=UDim2.new(1,0,0,8); mhP.Position=UDim2.new(0,0,1,-8)
+mhP.BackgroundColor3=C.headerBg; mhP.BorderSizePixel=0; mhP.ZIndex=82; mhP.Parent=modHdr
+
+local modTitle=Instance.new("TextLabel"); modTitle.Size=UDim2.new(1,-58,1,0)
+modTitle.Position=UDim2.new(0,14,0,0); modTitle.BackgroundTransparency=1; modTitle.Text="ACTION"
+modTitle.TextColor3=C.white; modTitle.Font=Enum.Font.GothamBlack; modTitle.TextSize=16
+modTitle.TextXAlignment=Enum.TextXAlignment.Left
+modTitle.TextStrokeColor3=C.black; modTitle.TextStrokeTransparency=0.70
+modTitle.ZIndex=83; modTitle.Parent=modHdr
+
+local modCloseBtn=Instance.new("TextButton")
+modCloseBtn.AnchorPoint=Vector2.new(1,0); modCloseBtn.Position=UDim2.new(1,0,0,0)
+modCloseBtn.Size=UDim2.new(0,48,0,48); modCloseBtn.BackgroundColor3=C.closeBg
+modCloseBtn.Text="X"; modCloseBtn.TextColor3=C.white
+modCloseBtn.Font=Enum.Font.GothamBlack; modCloseBtn.TextSize=18; modCloseBtn.AutoButtonColor=false
+modCloseBtn.BorderSizePixel=0; modCloseBtn.ZIndex=84; modCloseBtn.Parent=modHdr
+mkCorner(modCloseBtn,UDim.new(0,5))
+local mxPL=Instance.new("Frame"); mxPL.Size=UDim2.new(0,8,1,0); mxPL.Position=UDim2.new(0,0,0,0)
+mxPL.BackgroundColor3=C.closeBg; mxPL.BorderSizePixel=0; mxPL.ZIndex=85; mxPL.Parent=modCloseBtn
+local mxPB=Instance.new("Frame"); mxPB.Size=UDim2.new(1,0,0,8); mxPB.Position=UDim2.new(0,0,1,-8)
+mxPB.BackgroundColor3=C.closeBg; mxPB.BorderSizePixel=0; mxPB.ZIndex=85; mxPB.Parent=modCloseBtn
+local function setMCC(col)
+	modCloseBtn.BackgroundColor3=col; mxPL.BackgroundColor3=col; mxPB.BackgroundColor3=col
+end
+modCloseBtn.MouseEnter:Connect(function() setMCC(C.closeHov) end)
+modCloseBtn.MouseLeave:Connect(function() setMCC(C.closeBg) end)
+modCloseBtn.MouseButton1Down:Connect(function() setMCC(Color3.fromRGB(105,10,10)) end)
+modCloseBtn.MouseButton1Up:Connect(function() setMCC(C.closeHov) end)
+
+local modScroll=Instance.new("ScrollingFrame"); modScroll.Name="ModScroll"
+modScroll.Size=UDim2.new(1,-28,1,-112); modScroll.Position=UDim2.new(0,14,0,54)
+modScroll.BackgroundTransparency=1; modScroll.BorderSizePixel=0
+modScroll.ScrollBarThickness=3; modScroll.ScrollBarImageColor3=C.winBorder
+modScroll.CanvasSize=UDim2.new(0,0,0,0); modScroll.AutomaticCanvasSize=Enum.AutomaticSize.Y
+modScroll.ZIndex=82; modScroll.Parent=modWindow
+
+local modConfBtn=Instance.new("TextButton"); modConfBtn.Name="ConfirmBtn"
+modConfBtn.Size=UDim2.new(1,-28,0,40); modConfBtn.Position=UDim2.new(0,14,1,-52)
+modConfBtn.BackgroundColor3=C.btnCyan; modConfBtn.Text="CONFIRM"
+modConfBtn.TextColor3=C.white; modConfBtn.Font=Enum.Font.GothamBlack; modConfBtn.TextSize=14
+modConfBtn.AutoButtonColor=false; modConfBtn.ZIndex=82
+modConfBtn.TextStrokeColor3=C.black; modConfBtn.TextStrokeTransparency=0.65; modConfBtn.Parent=modWindow
+mkCorner(modConfBtn,UDim.new(0,4)); mkStroke(modConfBtn,C.winBorder,1)
+modConfBtn.MouseEnter:Connect(function() TweenService:Create(modConfBtn,TF,{BackgroundColor3=C.btnCyanDk}):Play() end)
+modConfBtn.MouseLeave:Connect(function() TweenService:Create(modConfBtn,TF,{BackgroundColor3=C.btnCyan}):Play() end)
+
+local function closeModGui()
+	for _,ch in ipairs(modGuiSG:GetChildren()) do if ch.Name=="StaticDrop" then ch:Destroy() end end
+	TweenService:Create(modWindow,TC,{Size=UDim2.new(0,430,0,0)}):Play()
+	TweenService:Create(modOverlay,TC,{BackgroundTransparency=1}):Play()
+	task.delay(0.18,function()
+		modGuiSG.Enabled=false; modWindow.Size=UDim2.new(0,430,0,350)
+		modOverlay.BackgroundTransparency=0.50
+	end)
+end
+modCloseBtn.MouseButton1Click:Connect(closeModGui)
+modOverlay.InputBegan:Connect(function(inp)
+	if inp.UserInputType==Enum.UserInputType.MouseButton1 then closeModGui() end
+end)
+
+local function clearModScroll()
+	for _,ch in ipairs(modScroll:GetChildren()) do ch:Destroy() end
+	for _,ch in ipairs(modGuiSG:GetChildren()) do if ch.Name=="StaticDrop" then ch:Destroy() end end
+end
+local function buildModFields(fn)
+	clearModScroll()
+	local l=Instance.new("UIListLayout"); l.SortOrder=Enum.SortOrder.LayoutOrder
+	l.FillDirection=Enum.FillDirection.Vertical; l.Padding=UDim.new(0,8)
+	l.HorizontalAlignment=Enum.HorizontalAlignment.Left; l.Parent=modScroll
+	local p=Instance.new("UIPadding"); p.PaddingTop=UDim.new(0,4); p.PaddingBottom=UDim.new(0,4); p.Parent=modScroll
+	return fn()
+end
+local function modTF(lblTxt,phText,multi,order)
+	local g=Instance.new("Frame"); g.Name="F_"..lblTxt; g.BackgroundTransparency=1
+	g.BorderSizePixel=0; g.Size=UDim2.new(1,0,0,multi and 86 or 56)
+	g.LayoutOrder=order or 1; g.Parent=modScroll
+	local l=Instance.new("TextLabel"); l.Size=UDim2.new(1,0,0,14); l.BackgroundTransparency=1
+	l.Text=lblTxt; l.TextColor3=C.winBorder; l.Font=Enum.Font.GothamBold; l.TextSize=11
+	l.TextXAlignment=Enum.TextXAlignment.Left; l.ZIndex=83; l.Parent=g
+	local b=Instance.new("TextBox"); b.Size=UDim2.new(1,0,0,multi and 66 or 36)
+	b.Position=UDim2.new(0,0,0,18); b.BackgroundColor3=C.modInputBg; b.BorderSizePixel=0
+	b.PlaceholderText=phText; b.PlaceholderColor3=C.phCol; b.Text=""; b.TextColor3=C.text
+	b.Font=Enum.Font.Gotham; b.TextSize=13; b.ClearTextOnFocus=false
+	b.MultiLine=multi or false; b.TextWrapped=multi or false
+	b.TextXAlignment=Enum.TextXAlignment.Left; b.TextYAlignment=Enum.TextYAlignment.Top
+	b.ZIndex=83; b.Parent=g; mkCorner(b,UDim.new(0,3)); mkStroke(b,C.inputBdr,1)
+	local pp=Instance.new("UIPadding"); pp.PaddingLeft=UDim.new(0,8); pp.PaddingRight=UDim.new(0,8)
+	pp.PaddingTop=UDim.new(0,5); pp.Parent=b
+	return b
+end
+local function modDF(lblTxt,options,defIdx,order)
+	local g=Instance.new("Frame"); g.Name="F_"..lblTxt; g.BackgroundTransparency=1
+	g.BorderSizePixel=0; g.Size=UDim2.new(1,0,0,56); g.LayoutOrder=order or 1
+	g.ClipsDescendants=false; g.Parent=modScroll
+	local l=Instance.new("TextLabel"); l.Size=UDim2.new(1,0,0,14); l.BackgroundTransparency=1
+	l.Text=lblTxt; l.TextColor3=C.winBorder; l.Font=Enum.Font.GothamBold; l.TextSize=11
+	l.TextXAlignment=Enum.TextXAlignment.Left; l.ZIndex=83; l.Parent=g
+	local _,_,gv=makeStaticDD(g,modGuiSG,options,defIdx,90); return gv
+end
+
+local curConfCb=nil
+local function openModGui(title,confCol,fn)
+	clearModScroll(); modTitle.Text=title; modConfBtn.BackgroundColor3=confCol or C.btnCyan
+	modGuiSG.Enabled=true; modWindow.Size=UDim2.new(0,430,0,0)
+	TweenService:Create(modWindow,TweenInfo.new(0.20,Enum.EasingStyle.Back,Enum.EasingDirection.Out),
+		{Size=UDim2.new(0,430,0,350)}):Play()
+	curConfCb=buildModFields(fn)
+end
+modConfBtn.MouseButton1Click:Connect(function() if curConfCb then task.spawn(curConfCb) end end)
+
+local function openKickGui()
+	openModGui("KICK PLAYER",C.btnOlive,function()
+		local ub=modTF("USERNAME","Enter exact username",false,1)
+		local rb=modTF("REASON","Reason for kick...",true,2)
+		return function()
+			local u=ub.Text:match("^%s*(.-)%s*$"); local r=rb.Text:match("^%s*(.-)%s*$")
+			if u=="" then showToast("Username required") return end
+			if r=="" then r="No reason given" end
+			adminRemote:FireServer("kick",u,r); showFeedback("Kicked "..u); closeModGui()
+		end
+	end)
+end
+local function openBanGui()
+	openModGui("BAN PLAYER",C.btnRed,function()
+		local ub=modTF("USERNAME","Enter exact username",false,1)
+		local rb=modTF("REASON","Reason for ban...",true,2)
+		local gd=modDF("DURATION",{"1 Day","1 Week","1 Month","Permanent"},4,3)
+		return function()
+			local u=ub.Text:match("^%s*(.-)%s*$"); local r=rb.Text:match("^%s*(.-)%s*$"); local d=gd()
+			if u=="" then showToast("Username required") return end
+			if r=="" then r="No reason given" end
+			adminRemote:FireServer("ban",u,r,d)
+			showFeedback("Banned "..u.." ["..d.."]")
+			if _G.__adminAppendBanLog then
+				_G.__adminAppendBanLog({username=u,moderator=player.Name,reason=r,duration=d,permanent=(d=="Permanent")})
+			end
+			closeModGui()
+		end
+	end)
+end
+local function openUnbanGui()
+	openModGui("UNBAN PLAYER",C.btnGreen,function()
+		local ub=modTF("USERNAME","Enter exact username to unban",false,1)
+		return function()
+			local u=ub.Text:match("^%s*(.-)%s*$")
+			if u=="" then showToast("Username required") return end
+			adminRemote:FireServer("unban",u); showFeedback("Unbanned "..u); closeModGui()
+		end
+	end)
+end
+local function openMuteGui()
+	openModGui("MUTE PLAYER",C.btnOlive,function()
+		local ub=modTF("USERNAME","Enter exact username",false,1)
+		local rb=modTF("REASON","Reason for mute...",true,2)
+		local gd=modDF("DURATION",{"10 Minutes","1 Hour","1 Day","Permanent"},4,3)
+		return function()
+			local u=ub.Text:match("^%s*(.-)%s*$"); local r=rb.Text:match("^%s*(.-)%s*$"); local d=gd()
+			if u=="" then showToast("Username required") return end
+			if r=="" then r="No reason given" end
+			adminRemote:FireServer("mute",u,r,d); showFeedback("Muted "..u.." ["..d.."]"); closeModGui()
+		end
+	end)
+end
+local function openUnmuteGui()
+	openModGui("UNMUTE PLAYER",C.btnGreen,function()
+		local ub=modTF("USERNAME","Enter exact username to unmute",false,1)
+		return function()
+			local u=ub.Text:match("^%s*(.-)%s*$")
+			if u=="" then showToast("Username required") return end
+			adminRemote:FireServer("unmute",u); showFeedback("Unmuted "..u); closeModGui()
+		end
+	end)
+end
+
+-- =====================================================
+-- FLY PANEL
+-- =====================================================
+local flyGuiSG=Instance.new("ScreenGui"); flyGuiSG.Name="FlyGui"
+flyGuiSG.ResetOnSpawn=false; flyGuiSG.ZIndexBehavior=Enum.ZIndexBehavior.Sibling
+flyGuiSG.IgnoreGuiInset=true; flyGuiSG.Enabled=false; flyGuiSG.DisplayOrder=14
+flyGuiSG.Parent=playerGui
+
+local flyWin=Instance.new("Frame"); flyWin.Name="FlyWindow"
+flyWin.Size=UDim2.new(0,240,0,160); flyWin.Position=UDim2.new(0,16,0.5,-80)
+flyWin.BackgroundColor3=C.winBg; flyWin.BorderSizePixel=0; flyWin.Visible=true
+flyWin.Parent=flyGuiSG; mkCorner(flyWin,UDim.new(0,5)); mkStroke(flyWin,C.winBorder,2)
+
+local flyHdr=Instance.new("Frame"); flyHdr.Name="Header"
+flyHdr.Size=UDim2.new(1,0,0,36); flyHdr.BackgroundColor3=C.headerBg
+flyHdr.BorderSizePixel=0; flyHdr.ZIndex=2; flyHdr.Parent=flyWin; mkCorner(flyHdr,UDim.new(0,5))
+local fhPatch=Instance.new("Frame"); fhPatch.Size=UDim2.new(1,0,0,6); fhPatch.Position=UDim2.new(0,0,1,-6)
+fhPatch.BackgroundColor3=C.headerBg; fhPatch.BorderSizePixel=0; fhPatch.ZIndex=2; fhPatch.Parent=flyHdr
+
+local flyTitleLbl=Instance.new("TextLabel"); flyTitleLbl.Size=UDim2.new(1,-40,1,0)
+flyTitleLbl.Position=UDim2.new(0,10,0,0); flyTitleLbl.BackgroundTransparency=1
+flyTitleLbl.Text="FLY"; flyTitleLbl.TextColor3=C.white
+flyTitleLbl.Font=Enum.Font.GothamBlack; flyTitleLbl.TextSize=14
+flyTitleLbl.TextXAlignment=Enum.TextXAlignment.Left
+flyTitleLbl.TextStrokeColor3=C.black; flyTitleLbl.TextStrokeTransparency=0.7
+flyTitleLbl.ZIndex=3; flyTitleLbl.Parent=flyHdr
+
+do
+	local dr,ds,fp=false,Vector2.zero,nil
+	flyHdr.InputBegan:Connect(function(inp)
+		if inp.UserInputType==Enum.UserInputType.MouseButton1 then
+			dr=true; ds=Vector2.new(inp.Position.X,inp.Position.Y); fp=flyWin.Position
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(inp)
+		if dr and inp.UserInputType==Enum.UserInputType.MouseMovement then
+			local d=Vector2.new(inp.Position.X-ds.X,inp.Position.Y-ds.Y)
+			flyWin.Position=UDim2.new(fp.X.Scale,fp.X.Offset+d.X,fp.Y.Scale,fp.Y.Offset+d.Y)
+		end
+	end)
+	UserInputService.InputEnded:Connect(function(inp)
+		if inp.UserInputType==Enum.UserInputType.MouseButton1 then dr=false end
+	end)
+end
+
+flyStatusLbl=Instance.new("TextLabel"); flyStatusLbl.Name="StatusLabel"
+flyStatusLbl.Size=UDim2.new(1,-20,0,18); flyStatusLbl.Position=UDim2.new(0,10,0,44)
+flyStatusLbl.BackgroundTransparency=1; flyStatusLbl.RichText=true
+flyStatusLbl.Text='<font color="rgb(135,145,145)">Status:</font>  <font color="rgb(215,55,55)"><b>Off</b></font>'
+flyStatusLbl.Font=Enum.Font.Gotham; flyStatusLbl.TextSize=12
+flyStatusLbl.TextXAlignment=Enum.TextXAlignment.Left; flyStatusLbl.ZIndex=3; flyStatusLbl.Parent=flyWin
+
+local flySpdLbl=Instance.new("TextLabel"); flySpdLbl.Size=UDim2.new(1,-20,0,16)
+flySpdLbl.Position=UDim2.new(0,10,0,66); flySpdLbl.BackgroundTransparency=1
+flySpdLbl.Text="Speed: "..flySpd; flySpdLbl.TextColor3=C.textDim
+flySpdLbl.Font=Enum.Font.Gotham; flySpdLbl.TextSize=11
+flySpdLbl.TextXAlignment=Enum.TextXAlignment.Left; flySpdLbl.ZIndex=3; flySpdLbl.Parent=flyWin
+
+flyTogBtn=mkBtn(flyWin,"ENABLE FLY",C.flyBtn,C.flyBtnDk,136,30,10,90,function()
+	if flyEnabled then
+		disableFly()
+		flyStatusLbl.Text='<font color="rgb(135,145,145)">Status:</font>  <font color="rgb(215,55,55)"><b>Off</b></font>'
+		flyTogBtn.Text="ENABLE FLY"; flyTogBtn.BackgroundColor3=C.flyBtn
+		showFeedback("Fly disabled")
+	else
+		enableFly()
+		flyStatusLbl.Text='<font color="rgb(135,145,145)">Status:</font>  <font color="rgb(55,195,95)"><b>On</b></font>'
+		flyTogBtn.Text="DISABLE FLY"; flyTogBtn.BackgroundColor3=C.btnRed
+		showFeedback("Fly enabled — E to disable")
+	end
+end)
+mkBtn(flyWin,"+",C.btnGreen,C.btnGreenDk,34,30,152,90,function()
+	flySpd=math.min(flySpd+10,300); flySpdLbl.Text="Speed: "..flySpd
+end)
+mkBtn(flyWin,"−",C.btnRed,C.btnRedDk,34,30,192,90,function()
+	flySpd=math.max(flySpd-10,10); flySpdLbl.Text="Speed: "..flySpd
+end)
+
+local flyHintLbl=Instance.new("TextLabel"); flyHintLbl.Size=UDim2.new(1,-20,0,14)
+flyHintLbl.Position=UDim2.new(0,10,0,130); flyHintLbl.BackgroundTransparency=1
+flyHintLbl.Text="WASD move  ·  E = toggle off"
+flyHintLbl.TextColor3=C.textDim; flyHintLbl.Font=Enum.Font.Gotham; flyHintLbl.TextSize=10
+flyHintLbl.ZIndex=3; flyHintLbl.Parent=flyWin
+
+-- =====================================================
+-- MAIN PANEL
+-- =====================================================
+local CONTENT_Y = HDR_H + TAB_H
+local CONTENT_H = WIN_H - CONTENT_Y
+local panelMinimized = false
+
+local mainPanel = Instance.new("Frame")
+mainPanel.Name             = "MainPanel"
+mainPanel.AnchorPoint      = Vector2.new(0.5, 0.5)
+mainPanel.Position         = UDim2.new(0.5, 0, 0.5, 0)
+mainPanel.Size             = UDim2.new(0, WIN_W, 0, WIN_H)
+mainPanel.BackgroundColor3 = C.winBg
+mainPanel.BorderSizePixel  = 0
+mainPanel.Visible          = false
+mainPanel.ClipsDescendants = false
+mainPanel.ZIndex           = 2
+mainPanel.Parent           = screenGui
+mkCorner(mainPanel, UDim.new(0, 5))
+mkStroke(mainPanel, C.winBorder, 2)
+
+-- =====================================================
+-- PANEL HEADER
+-- =====================================================
+local panelHdr = Instance.new("Frame")
+panelHdr.Name             = "Header"
+panelHdr.Size             = UDim2.new(1, 0, 0, HDR_H)
+panelHdr.BackgroundColor3 = C.headerBg
+panelHdr.BorderSizePixel  = 0
+panelHdr.ZIndex           = 4
+panelHdr.ClipsDescendants = true
+panelHdr.Parent           = mainPanel
+mkCorner(panelHdr, UDim.new(0, 5))
+local phPatch = Instance.new("Frame")
+phPatch.Size             = UDim2.new(1, 0, 0, 8)
+phPatch.Position         = UDim2.new(0, 0, 1, -8)
+phPatch.BackgroundColor3 = C.headerBg
+phPatch.BorderSizePixel  = 0
+phPatch.ZIndex           = 4
+phPatch.Parent           = panelHdr
+
+local prefixLbl = Instance.new("TextLabel")
+prefixLbl.Size                   = UDim2.new(0, 80, 1, 0)
+prefixLbl.Position               = UDim2.new(0, 12, 0, 0)
+prefixLbl.BackgroundTransparency = 1
+prefixLbl.Text                   = "CMPS://"
+prefixLbl.TextColor3             = C.winBorder
+prefixLbl.Font                   = Enum.Font.GothamBold
+prefixLbl.TextSize               = 14
+prefixLbl.TextXAlignment         = Enum.TextXAlignment.Left
+prefixLbl.ZIndex                 = 5
+prefixLbl.Parent                 = panelHdr
+
+local mainTitleLbl = Instance.new("TextLabel")
+mainTitleLbl.Size                   = UDim2.new(1, -200, 1, 0)
+mainTitleLbl.Position               = UDim2.new(0, 72, 0, 0)
+mainTitleLbl.BackgroundTransparency = 1
+mainTitleLbl.Text                   = "MAIN"
+mainTitleLbl.TextColor3             = C.white
+mainTitleLbl.Font                   = Enum.Font.GothamBlack
+mainTitleLbl.TextSize               = 20
+mainTitleLbl.TextXAlignment         = Enum.TextXAlignment.Left
+mainTitleLbl.TextStrokeColor3       = C.black
+mainTitleLbl.TextStrokeTransparency = 0.72
+mainTitleLbl.ZIndex                 = 5
+mainTitleLbl.Parent                 = panelHdr
+
+-- CLOSE BUTTON — created first so minimize callback can reference it safely
+local panelCloseBtn = Instance.new("TextButton")
+panelCloseBtn.AnchorPoint      = Vector2.new(1, 0)
+panelCloseBtn.Position         = UDim2.new(1, 0, 0, 0)
+panelCloseBtn.Size             = UDim2.new(0, HDR_H, 0, HDR_H)
+panelCloseBtn.BackgroundColor3 = C.closeBg
+panelCloseBtn.Text             = "X"
+panelCloseBtn.TextColor3       = C.white
+panelCloseBtn.Font             = Enum.Font.GothamBlack
+panelCloseBtn.TextSize         = 18
+panelCloseBtn.AutoButtonColor  = false
+panelCloseBtn.BorderSizePixel  = 0
+panelCloseBtn.ZIndex           = 6
+panelCloseBtn.Parent           = panelHdr
+mkCorner(panelCloseBtn, UDim.new(0, 5))
+local pcPL = Instance.new("Frame")
+pcPL.Size=UDim2.new(0,8,1,0); pcPL.Position=UDim2.new(0,0,0,0)
+pcPL.BackgroundColor3=C.closeBg; pcPL.BorderSizePixel=0; pcPL.ZIndex=7; pcPL.Parent=panelCloseBtn
+local pcPB = Instance.new("Frame")
+pcPB.Size=UDim2.new(1,0,0,8); pcPB.Position=UDim2.new(0,0,1,-8)
+pcPB.BackgroundColor3=C.closeBg; pcPB.BorderSizePixel=0; pcPB.ZIndex=7; pcPB.Parent=panelCloseBtn
+local function setPCC(col)
+	panelCloseBtn.BackgroundColor3=col; pcPL.BackgroundColor3=col; pcPB.BackgroundColor3=col
+end
+panelCloseBtn.MouseEnter:Connect(function() setPCC(C.closeHov) end)
+panelCloseBtn.MouseLeave:Connect(function() setPCC(C.closeBg) end)
+panelCloseBtn.MouseButton1Down:Connect(function() setPCC(Color3.fromRGB(105,10,10)) end)
+panelCloseBtn.MouseButton1Up:Connect(function() setPCC(C.closeHov) end)
+panelCloseBtn.MouseButton1Click:Connect(function()
+	TweenService:Create(mainPanel,TC,{Size=UDim2.new(0,WIN_W,0,10)}):Play()
+	task.delay(0.17,function()
+		mainPanel.Visible=false
+		mainPanel.Size=UDim2.new(0,WIN_W,0,WIN_H)
+		mainPanel.ClipsDescendants=false
+		panelMinimized=false
+	end)
+end)
+
+-- MINIMIZE BUTTON — created after close so no forward-reference issue
+local panelMinBtn = Instance.new("TextButton")
+panelMinBtn.AnchorPoint      = Vector2.new(1, 0)
+panelMinBtn.Position         = UDim2.new(1, -HDR_H, 0, 0)
+panelMinBtn.Size             = UDim2.new(0, HDR_H, 0, HDR_H)
+panelMinBtn.BackgroundColor3 = Color3.fromRGB(30, 42, 42)
+panelMinBtn.Text             = "-"
+panelMinBtn.TextColor3       = C.winBorder
+panelMinBtn.Font             = Enum.Font.GothamBlack
+panelMinBtn.TextSize         = 26
+panelMinBtn.AutoButtonColor  = false
+panelMinBtn.BorderSizePixel  = 0
+panelMinBtn.ZIndex           = 6
+panelMinBtn.Parent           = panelHdr
+mkCorner(panelMinBtn, UDim.new(0, 5))
+local minPL = Instance.new("Frame")
+minPL.Size=UDim2.new(0,8,1,0); minPL.Position=UDim2.new(0,0,0,0)
+minPL.BackgroundColor3=Color3.fromRGB(30,42,42); minPL.BorderSizePixel=0
+minPL.ZIndex=7; minPL.Parent=panelMinBtn
+local minPB = Instance.new("Frame")
+minPB.Size=UDim2.new(1,0,0,8); minPB.Position=UDim2.new(0,0,1,-8)
+minPB.BackgroundColor3=Color3.fromRGB(30,42,42); minPB.BorderSizePixel=0
+minPB.ZIndex=7; minPB.Parent=panelMinBtn
+local minNorm=Color3.fromRGB(30,42,42); local minHov=Color3.fromRGB(46,64,64)
+local function setMinC(col)
+	panelMinBtn.BackgroundColor3=col; minPL.BackgroundColor3=col; minPB.BackgroundColor3=col
+end
+panelMinBtn.MouseEnter:Connect(function() setMinC(minHov) end)
+panelMinBtn.MouseLeave:Connect(function() setMinC(minNorm) end)
+panelMinBtn.MouseButton1Down:Connect(function() setMinC(Color3.fromRGB(20,30,30)) end)
+panelMinBtn.MouseButton1Up:Connect(function() setMinC(minHov) end)
+panelMinBtn.MouseButton1Click:Connect(function()
+	panelMinimized = not panelMinimized
+	if panelMinimized then
+		mainPanel.ClipsDescendants = true
+		TweenService:Create(mainPanel,TC,{Size=UDim2.new(0,WIN_W,0,HDR_H)}):Play()
+		panelMinBtn.Text = "+"
+	else
+		TweenService:Create(mainPanel,TO,{Size=UDim2.new(0,WIN_W,0,WIN_H)}):Play()
+		task.delay(0.25,function() mainPanel.ClipsDescendants=false end)
+		panelMinBtn.Text = "-"
+	end
+end)
+
+-- =====================================================
+-- PANEL DRAGGING
+-- =====================================================
+do
+	local dragging=false
+	local dragStartMouse=Vector2.zero
+	local dragStartPos=nil
+	panelHdr.InputBegan:Connect(function(inp)
+		if inp.UserInputType==Enum.UserInputType.MouseButton1 then
+			dragging=true
+			dragStartMouse=Vector2.new(inp.Position.X,inp.Position.Y)
+			dragStartPos=mainPanel.Position
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(inp)
+		if dragging and inp.UserInputType==Enum.UserInputType.MouseMovement then
+			local delta=Vector2.new(inp.Position.X-dragStartMouse.X,inp.Position.Y-dragStartMouse.Y)
+			mainPanel.Position=UDim2.new(
+				dragStartPos.X.Scale, dragStartPos.X.Offset+delta.X,
+				dragStartPos.Y.Scale, dragStartPos.Y.Offset+delta.Y)
+		end
+	end)
+	UserInputService.InputEnded:Connect(function(inp)
+		if inp.UserInputType==Enum.UserInputType.MouseButton1 then dragging=false end
+	end)
+end
+
+-- =====================================================
+-- SCROLLABLE TAB BAR
+-- =====================================================
+local tabBarClip = Instance.new("Frame")
+tabBarClip.Name             = "TabBarClip"
+tabBarClip.Position         = UDim2.new(0, 0, 0, HDR_H)
+tabBarClip.Size             = UDim2.new(1, 0, 0, TAB_H)
+tabBarClip.BackgroundColor3 = C.tabOff
+tabBarClip.BorderSizePixel  = 0
+tabBarClip.ZIndex           = 4
+tabBarClip.ClipsDescendants = true
+tabBarClip.Parent           = mainPanel
+
+local tabScroll = Instance.new("ScrollingFrame")
+tabScroll.Name                = "TabScroll"
+tabScroll.Size                = UDim2.new(1,0,1,0)
+tabScroll.Position            = UDim2.new(0,0,0,0)
+tabScroll.BackgroundTransparency = 1
+tabScroll.BorderSizePixel     = 0
+tabScroll.ScrollBarThickness  = 0
+tabScroll.ScrollingDirection  = Enum.ScrollingDirection.X
+tabScroll.CanvasSize          = UDim2.new(0,0,1,0)
+tabScroll.AutomaticCanvasSize = Enum.AutomaticSize.X
+tabScroll.ElasticBehavior     = Enum.ElasticBehavior.Never
+tabScroll.ZIndex              = 4
+tabScroll.Parent              = tabBarClip
+
+local tabLayout = Instance.new("UIListLayout")
+tabLayout.FillDirection       = Enum.FillDirection.Horizontal
+tabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+tabLayout.VerticalAlignment   = Enum.VerticalAlignment.Center
+tabLayout.SortOrder           = Enum.SortOrder.LayoutOrder
+tabLayout.Padding             = UDim.new(0,1)
+tabLayout.Parent              = tabScroll
+
+local contentArea = Instance.new("Frame")
+contentArea.Name             = "ContentArea"
+contentArea.Position         = UDim2.new(0,0,0,CONTENT_Y)
+contentArea.Size             = UDim2.new(1,0,0,CONTENT_H)
+contentArea.BackgroundColor3 = C.contentBg
+contentArea.BorderSizePixel  = 0
+contentArea.ClipsDescendants = true
+contentArea.ZIndex           = 3
+contentArea.Parent           = mainPanel
+
+local tabs      = {}
+local activeTab = 1
+
+local function selectTab(index)
+	for i,t in ipairs(tabs) do
+		if i==index then
+			t.btn.BackgroundColor3=C.tabOn; t.btn.TextColor3=C.tabOnTxt
+			t.page.Visible=true; activeTab=i
+			local targetX=(i-1)*(TAB_W+1)
+			TweenService:Create(tabScroll,TweenInfo.new(0.18,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),
+				{CanvasPosition=Vector2.new(math.max(0,targetX-20),0)}):Play()
+		else
+			t.btn.BackgroundColor3=C.tabOff; t.btn.TextColor3=C.tabOffTxt; t.page.Visible=false
+		end
+	end
+end
+
+local TAB_NAMES={"EVENTS","ECONOMY","SPEED","ITEMS","FUSE MACHINE","BAN LOGS","MISC"}
+for i,name in ipairs(TAB_NAMES) do
+	local tbtn=Instance.new("TextButton")
+	tbtn.Name=name; tbtn.Size=UDim2.new(0,TAB_W,1,0); tbtn.BackgroundColor3=C.tabOff
+	tbtn.BorderSizePixel=0; tbtn.Text=name; tbtn.TextColor3=C.tabOffTxt
+	tbtn.Font=Enum.Font.GothamBold; tbtn.TextSize=11; tbtn.AutoButtonColor=false
+	tbtn.LayoutOrder=i; tbtn.ZIndex=5; tbtn.Parent=tabScroll
+
+	local indicator=Instance.new("Frame")
+	indicator.Name="Indicator"; indicator.Size=UDim2.new(1,0,0,2)
+	indicator.Position=UDim2.new(0,0,1,-2); indicator.BackgroundColor3=C.winBorder
+	indicator.BackgroundTransparency=1; indicator.BorderSizePixel=0
+	indicator.ZIndex=6; indicator.Parent=tbtn
+
+	local page=Instance.new("Frame")
+	page.Name="Page_"..name; page.Size=UDim2.new(1,0,1,0)
+	page.BackgroundTransparency=1; page.BorderSizePixel=0
+	page.Visible=false; page.ZIndex=4; page.Parent=contentArea
+
+	table.insert(tabs,{btn=tbtn,page=page,indicator=indicator})
+	local idx=i
+	tbtn.MouseButton1Click:Connect(function()
+		selectTab(idx)
+		for j,t in ipairs(tabs) do
+			t.indicator.BackgroundTransparency=(j==idx) and 0 or 1
+		end
+	end)
+end
+selectTab(1)
+tabs[1].indicator.BackgroundTransparency=0
+
+-- =====================================================
+-- EVENTS INFO POPUP
+-- =====================================================
+local eventsInfoGui=Instance.new("ScreenGui")
+eventsInfoGui.Name="EventsInfoGui"; eventsInfoGui.ResetOnSpawn=false
+eventsInfoGui.ZIndexBehavior=Enum.ZIndexBehavior.Sibling; eventsInfoGui.IgnoreGuiInset=true
+eventsInfoGui.Enabled=false; eventsInfoGui.DisplayOrder=22; eventsInfoGui.Parent=playerGui
+
+local evInfoOverlay=Instance.new("Frame")
+evInfoOverlay.Size=UDim2.new(1,0,1,0); evInfoOverlay.BackgroundColor3=Color3.fromRGB(0,0,0)
+evInfoOverlay.BackgroundTransparency=0.55; evInfoOverlay.BorderSizePixel=0
+evInfoOverlay.ZIndex=90; evInfoOverlay.Parent=eventsInfoGui
+
+local evInfoWin=Instance.new("Frame")
+evInfoWin.AnchorPoint=Vector2.new(0.5,0.5); evInfoWin.Position=UDim2.new(0.5,0,0.5,0)
+evInfoWin.Size=UDim2.new(0,340,0,210); evInfoWin.BackgroundColor3=C.winBg
+evInfoWin.BorderSizePixel=0; evInfoWin.ZIndex=91; evInfoWin.Parent=eventsInfoGui
+mkCorner(evInfoWin,UDim.new(0,6)); mkStroke(evInfoWin,C.winBorder,2)
+
+local evInfoHdr=Instance.new("Frame")
+evInfoHdr.Size=UDim2.new(1,0,0,42); evInfoHdr.BackgroundColor3=C.headerBg
+evInfoHdr.BorderSizePixel=0; evInfoHdr.ZIndex=92; evInfoHdr.Parent=evInfoWin
+mkCorner(evInfoHdr,UDim.new(0,6))
+local evihPatch=Instance.new("Frame")
+evihPatch.Size=UDim2.new(1,0,0,8); evihPatch.Position=UDim2.new(0,0,1,-8)
+evihPatch.BackgroundColor3=C.headerBg; evihPatch.BorderSizePixel=0
+evihPatch.ZIndex=92; evihPatch.Parent=evInfoHdr
+
+local evInfoTitle=Instance.new("TextLabel")
+evInfoTitle.Size=UDim2.new(1,-52,1,0); evInfoTitle.Position=UDim2.new(0,14,0,0)
+evInfoTitle.BackgroundTransparency=1; evInfoTitle.Text="EVENTS"
+evInfoTitle.TextColor3=C.white; evInfoTitle.Font=Enum.Font.GothamBlack; evInfoTitle.TextSize=15
+evInfoTitle.TextXAlignment=Enum.TextXAlignment.Left
+evInfoTitle.TextStrokeColor3=C.black; evInfoTitle.TextStrokeTransparency=0.7
+evInfoTitle.ZIndex=93; evInfoTitle.Parent=evInfoHdr
+
+local evInfoCloseBtn=Instance.new("TextButton")
+evInfoCloseBtn.AnchorPoint=Vector2.new(1,0); evInfoCloseBtn.Position=UDim2.new(1,0,0,0)
+evInfoCloseBtn.Size=UDim2.new(0,42,0,42); evInfoCloseBtn.BackgroundColor3=C.closeBg
+evInfoCloseBtn.Text="X"; evInfoCloseBtn.TextColor3=C.white
+evInfoCloseBtn.Font=Enum.Font.GothamBlack; evInfoCloseBtn.TextSize=16
+evInfoCloseBtn.AutoButtonColor=false; evInfoCloseBtn.BorderSizePixel=0
+evInfoCloseBtn.ZIndex=94; evInfoCloseBtn.Parent=evInfoHdr
+mkCorner(evInfoCloseBtn,UDim.new(0,5))
+local eiPL=Instance.new("Frame"); eiPL.Size=UDim2.new(0,8,1,0); eiPL.Position=UDim2.new(0,0,0,0)
+eiPL.BackgroundColor3=C.closeBg; eiPL.BorderSizePixel=0; eiPL.ZIndex=95; eiPL.Parent=evInfoCloseBtn
+local eiPB=Instance.new("Frame"); eiPB.Size=UDim2.new(1,0,0,8); eiPB.Position=UDim2.new(0,0,1,-8)
+eiPB.BackgroundColor3=C.closeBg; eiPB.BorderSizePixel=0; eiPB.ZIndex=95; eiPB.Parent=evInfoCloseBtn
+local function setEIC(col)
+	evInfoCloseBtn.BackgroundColor3=col; eiPL.BackgroundColor3=col; eiPB.BackgroundColor3=col
+end
+evInfoCloseBtn.MouseEnter:Connect(function() setEIC(C.closeHov) end)
+evInfoCloseBtn.MouseLeave:Connect(function() setEIC(C.closeBg) end)
+evInfoCloseBtn.MouseButton1Down:Connect(function() setEIC(Color3.fromRGB(105,10,10)) end)
+evInfoCloseBtn.MouseButton1Up:Connect(function() setEIC(C.closeHov) end)
+
+local evInfoBody=Instance.new("TextLabel")
+evInfoBody.Size=UDim2.new(1,-28,1,-56); evInfoBody.Position=UDim2.new(0,14,0,50)
+evInfoBody.BackgroundTransparency=1; evInfoBody.RichText=true; evInfoBody.TextWrapped=true
+evInfoBody.Text="these are all the events u can run -eli\n\n"
+	..'<font color="rgb(0,220,200)"><b>rainbow</b></font>\n'
+	..'<font color="rgb(0,220,200)"><b>disco</b></font>\n'
+	..'<font color="rgb(0,220,200)"><b>spawneli</b></font>'
+evInfoBody.TextColor3=C.text; evInfoBody.Font=Enum.Font.Gotham; evInfoBody.TextSize=14
+evInfoBody.TextXAlignment=Enum.TextXAlignment.Left; evInfoBody.TextYAlignment=Enum.TextYAlignment.Top
+evInfoBody.ZIndex=92; evInfoBody.Parent=evInfoWin
+
+local function closeEventsInfo()
+	TweenService:Create(evInfoWin,TC,{Size=UDim2.new(0,340,0,0)}):Play()
+	TweenService:Create(evInfoOverlay,TC,{BackgroundTransparency=1}):Play()
+	task.delay(0.18,function()
+		eventsInfoGui.Enabled=false
+		evInfoWin.Size=UDim2.new(0,340,0,210)
+		evInfoOverlay.BackgroundTransparency=0.55
+	end)
+end
+local function openEventsInfo()
+	eventsInfoGui.Enabled=true; evInfoWin.Size=UDim2.new(0,340,0,0)
+	TweenService:Create(evInfoWin,TweenInfo.new(0.20,Enum.EasingStyle.Back,Enum.EasingDirection.Out),
+		{Size=UDim2.new(0,340,0,210)}):Play()
+end
+evInfoCloseBtn.MouseButton1Click:Connect(closeEventsInfo)
+evInfoOverlay.InputBegan:Connect(function(inp)
+	if inp.UserInputType==Enum.UserInputType.MouseButton1 then closeEventsInfo() end
+end)
+
+-- =====================================================
+-- TAB PAGES
+-- =====================================================
+
+-- ── EVENTS (1) ────────────────────────────────────────────────────────────
+do
+	local page=tabs[1].page
+	local CW=WIN_W-PAD*2
+
+	local evInfoBtn=Instance.new("TextButton")
+	evInfoBtn.Size=UDim2.new(0,80,0,26); evInfoBtn.Position=UDim2.new(0,PAD,1,-36)
+	evInfoBtn.BackgroundColor3=C.btnPurple; evInfoBtn.Text="events"
+	evInfoBtn.TextColor3=C.white; evInfoBtn.Font=Enum.Font.GothamBold; evInfoBtn.TextSize=11
+	evInfoBtn.AutoButtonColor=false; evInfoBtn.BorderSizePixel=0; evInfoBtn.ZIndex=5
+	evInfoBtn.Parent=page; mkCorner(evInfoBtn,UDim.new(0,4))
+	evInfoBtn.MouseEnter:Connect(function() TweenService:Create(evInfoBtn,TF,{BackgroundColor3=C.btnPurpleDk}):Play() end)
+	evInfoBtn.MouseLeave:Connect(function() TweenService:Create(evInfoBtn,TF,{BackgroundColor3=C.btnPurple}):Play() end)
+	evInfoBtn.MouseButton1Click:Connect(openEventsInfo)
+
+	mkSectionLabel(page,"EVENT NAME",10)
+	local evInput=Instance.new("TextBox")
+	evInput.Size=UDim2.new(1,-PAD*2,0,32); evInput.Position=UDim2.new(0,PAD,0,34)
+	evInput.BackgroundColor3=C.inputBg; evInput.BorderSizePixel=0
+	evInput.PlaceholderText="Enter Event Name...  (e.g. rainbow, disco, spawneli)"
+	evInput.PlaceholderColor3=C.phCol; evInput.Text=""; evInput.TextColor3=C.inputText
+	evInput.Font=Enum.Font.Gotham; evInput.TextSize=13; evInput.TextXAlignment=Enum.TextXAlignment.Center
+	evInput.ClearTextOnFocus=false; evInput.ZIndex=5; evInput.Parent=page
+	mkCorner(evInput,UDim.new(0,4)); mkStroke(evInput,C.inputBdr,1)
+
+	local HALF=math.floor((CW-6)/2)
+	mkBtn(page,"START",C.btnGreen,C.btnGreenDk,HALF,36,PAD,78,function()
+		local n=evInput.Text:match("^%s*(.-)%s*$")
+		if n=="" then showToast("Enter event name") return end
+		adminRemote:FireServer("event_start",n); showFeedback("Event started: "..n)
+	end)
+	mkBtn(page,"END",C.btnRed,C.btnRedDk,HALF,36,PAD+HALF+6,78,function()
+		local n=evInput.Text:match("^%s*(.-)%s*$")
+		adminRemote:FireServer("event_end",n); showFeedback("Event ended")
+	end)
+
+	mkSectionLabel(page,"ANNOUNCEMENT",126)
+	local annInput=Instance.new("TextBox")
+	annInput.Size=UDim2.new(1,-PAD*2,0,32); annInput.Position=UDim2.new(0,PAD,0,150)
+	annInput.BackgroundColor3=C.inputBg; annInput.BorderSizePixel=0
+	annInput.PlaceholderText="Enter announcement text..."; annInput.PlaceholderColor3=C.phCol
+	annInput.Text=""; annInput.TextColor3=C.inputText; annInput.Font=Enum.Font.Gotham
+	annInput.TextSize=13; annInput.TextXAlignment=Enum.TextXAlignment.Center
+	annInput.ClearTextOnFocus=false; annInput.ZIndex=5; annInput.Parent=page
+	mkCorner(annInput,UDim.new(0,4)); mkStroke(annInput,C.inputBdr,1)
+
+	local glbOn2=false
+	mkBtn(page,"SEND",C.btnPurple,C.btnPurpleDk,math.floor(CW*0.4),34,PAD+math.floor(CW*0.3),194,function()
+		local m=annInput.Text:match("^%s*(.-)%s*$")
+		if m=="" then showToast("Enter announcement text") return end
+		adminRemote:FireServer("announce",m,glbOn2)
+		showFeedback(glbOn2 and ("Global announced: "..m) or ("Announced: "..m))
+	end)
+
+	local ghint2=Instance.new("TextLabel"); ghint2.Size=UDim2.new(1,-PAD*2,0,16)
+	ghint2.Position=UDim2.new(0,PAD,0,240); ghint2.BackgroundTransparency=1
+	ghint2.Text="· CLICK TO TOGGLE ON/OFF ·"; ghint2.TextColor3=C.winBorder
+	ghint2.Font=Enum.Font.Gotham; ghint2.TextSize=11; ghint2.TextXAlignment=Enum.TextXAlignment.Center
+	ghint2.ZIndex=5; ghint2.Parent=page
+
+	local glbBtn2
+	glbBtn2=mkBtn(page,"GLOBAL:  OFF",C.glbOff,C.btnRedDk,math.floor(CW*0.5),34,PAD+math.floor(CW*0.25),258,function()
+		glbOn2=not glbOn2
+		glbBtn2.Text=glbOn2 and "GLOBAL:  ON" or "GLOBAL:  OFF"
+		glbBtn2.BackgroundColor3=glbOn2 and C.glbOn or C.glbOff
+	end)
+end
+
+-- ── ECONOMY (2) ───────────────────────────────────────────────────────────
+do
+	local page=tabs[2].page; local CW=WIN_W-PAD*2
+	mkSectionLabel(page,"TARGET PLAYER",10)
+	local ecoPlayer=Instance.new("TextBox")
+	ecoPlayer.Size=UDim2.new(1,-PAD*2,0,32); ecoPlayer.Position=UDim2.new(0,PAD,0,34)
+	ecoPlayer.BackgroundColor3=C.inputBg; ecoPlayer.BorderSizePixel=0
+	ecoPlayer.PlaceholderText="Player name..."; ecoPlayer.PlaceholderColor3=C.phCol
+	ecoPlayer.Text=""; ecoPlayer.TextColor3=C.inputText; ecoPlayer.Font=Enum.Font.Gotham
+	ecoPlayer.TextSize=13; ecoPlayer.TextXAlignment=Enum.TextXAlignment.Center
+	ecoPlayer.ClearTextOnFocus=false; ecoPlayer.ZIndex=5; ecoPlayer.Parent=page
+	mkCorner(ecoPlayer,UDim.new(0,4)); mkStroke(ecoPlayer,C.inputBdr,1)
+	attachDropdown(ecoPlayer,page)
+
+	mkSectionLabel(page,"AMOUNT",78)
+	local amtInput=Instance.new("TextBox")
+	amtInput.Size=UDim2.new(1,-PAD*2,0,32); amtInput.Position=UDim2.new(0,PAD,0,102)
+	amtInput.BackgroundColor3=C.inputBg; amtInput.BorderSizePixel=0
+	amtInput.PlaceholderText="e.g. 1000, 50k, 2m"; amtInput.PlaceholderColor3=C.phCol
+	amtInput.Text=""; amtInput.TextColor3=C.inputText; amtInput.Font=Enum.Font.Gotham
+	amtInput.TextSize=13; amtInput.TextXAlignment=Enum.TextXAlignment.Center
+	amtInput.ClearTextOnFocus=false; amtInput.ZIndex=5; amtInput.Parent=page
+	mkCorner(amtInput,UDim.new(0,4)); mkStroke(amtInput,C.inputBdr,1)
+
+	local HALF=math.floor((CW-6)/2)
+	mkBtn(page,"GIVE CASH",C.btnGreen,C.btnGreenDk,HALF,36,PAD,146,function()
+		local u=ecoPlayer.Text:match("^%s*(.-)%s*$"); local a=parseAmount(amtInput.Text)
+		if u=="" then showToast("Enter player name") return end
+		if not a then showToast("Invalid amount") return end
+		adminRemote:FireServer("give_cash",u,a); showFeedback("Gave $"..a.." to "..u)
+	end)
+	mkBtn(page,"REMOVE CASH",C.btnRed,C.btnRedDk,HALF,36,PAD+HALF+6,146,function()
+		local u=ecoPlayer.Text:match("^%s*(.-)%s*$"); local a=parseAmount(amtInput.Text)
+		if u=="" then showToast("Enter player name") return end
+		if not a then showToast("Invalid amount") return end
+		adminRemote:FireServer("remove_cash",u,a); showFeedback("Removed $"..a.." from "..u)
+	end)
+	mkBtn(page,"SET CASH",C.btnCyan,C.btnCyanDk,HALF,36,PAD,188,function()
+		local u=ecoPlayer.Text:match("^%s*(.-)%s*$"); local a=parseAmount(amtInput.Text)
+		if u=="" then showToast("Enter player name") return end
+		if not a then showToast("Invalid amount") return end
+		adminRemote:FireServer("set_cash",u,a); showFeedback("Set cash of "..u.." to $"..a)
+	end)
+	mkBtn(page,"RESET CASH",C.btnOrange,C.btnOrangeDk,HALF,36,PAD+HALF+6,188,function()
+		local u=ecoPlayer.Text:match("^%s*(.-)%s*$")
+		if u=="" then showToast("Enter player name") return end
+		adminRemote:FireServer("reset_cash",u); showFeedback("Reset cash for "..u)
+	end)
+end
+
+-- ── SPEED (3) ─────────────────────────────────────────────────────────────
+do
+	local page=tabs[3].page; local CW=WIN_W-PAD*2
+	mkSectionLabel(page,"TARGET PLAYER",10)
+	local spdPlayer=Instance.new("TextBox")
+	spdPlayer.Size=UDim2.new(1,-PAD*2,0,32); spdPlayer.Position=UDim2.new(0,PAD,0,34)
+	spdPlayer.BackgroundColor3=C.inputBg; spdPlayer.BorderSizePixel=0
+	spdPlayer.PlaceholderText="Player name..."; spdPlayer.PlaceholderColor3=C.phCol
+	spdPlayer.Text=""; spdPlayer.TextColor3=C.inputText; spdPlayer.Font=Enum.Font.Gotham
+	spdPlayer.TextSize=13; spdPlayer.TextXAlignment=Enum.TextXAlignment.Center
+	spdPlayer.ClearTextOnFocus=false; spdPlayer.ZIndex=5; spdPlayer.Parent=page
+	mkCorner(spdPlayer,UDim.new(0,4)); mkStroke(spdPlayer,C.inputBdr,1)
+	attachDropdown(spdPlayer,page)
+
+	mkSectionLabel(page,"WALK SPEED",78)
+	local wsInput=Instance.new("TextBox")
+	wsInput.Size=UDim2.new(1,-PAD*2,0,32); wsInput.Position=UDim2.new(0,PAD,0,102)
+	wsInput.BackgroundColor3=C.inputBg; wsInput.BorderSizePixel=0
+	wsInput.PlaceholderText="Default: 16"; wsInput.PlaceholderColor3=C.phCol
+	wsInput.Text=""; wsInput.TextColor3=C.inputText; wsInput.Font=Enum.Font.Gotham
+	wsInput.TextSize=13; wsInput.TextXAlignment=Enum.TextXAlignment.Center
+	wsInput.ClearTextOnFocus=false; wsInput.ZIndex=5; wsInput.Parent=page
+	mkCorner(wsInput,UDim.new(0,4)); mkStroke(wsInput,C.inputBdr,1)
+
+	local THIRD=math.floor((CW-10)/3)
+	mkBtn(page,"SET SPEED",C.btnCyan,C.btnCyanDk,THIRD,34,PAD,146,function()
+		local u=spdPlayer.Text:match("^%s*(.-)%s*$"); local v=tonumber(wsInput.Text)
+		if u=="" then showToast("Enter player name") return end
+		if not v then showToast("Invalid value") return end
+		adminRemote:FireServer("set_speed",u,v); showFeedback("Speed -> "..v.." for "..u)
+	end)
+	mkBtn(page,"RESET",C.btnOlive,C.btnOliveDk,THIRD,34,PAD+THIRD+5,146,function()
+		local u=spdPlayer.Text:match("^%s*(.-)%s*$")
+		if u=="" then showToast("Enter player name") return end
+		adminRemote:FireServer("set_speed",u,16); showFeedback("Speed reset for "..u)
+	end)
+	mkBtn(page,"GOD SPEED",C.btnPurple,C.btnPurpleDk,THIRD,34,PAD+THIRD*2+10,146,function()
+		local u=spdPlayer.Text:match("^%s*(.-)%s*$")
+		if u=="" then showToast("Enter player name") return end
+		adminRemote:FireServer("set_speed",u,200); showFeedback("God speed -> "..u)
+	end)
+
+	mkSectionLabel(page,"JUMP POWER",192)
+	local jpInput=Instance.new("TextBox")
+	jpInput.Size=UDim2.new(1,-PAD*2,0,32); jpInput.Position=UDim2.new(0,PAD,0,216)
+	jpInput.BackgroundColor3=C.inputBg; jpInput.BorderSizePixel=0
+	jpInput.PlaceholderText="Default: 50"; jpInput.PlaceholderColor3=C.phCol
+	jpInput.Text=""; jpInput.TextColor3=C.inputText; jpInput.Font=Enum.Font.Gotham
+	jpInput.TextSize=13; jpInput.TextXAlignment=Enum.TextXAlignment.Center
+	jpInput.ClearTextOnFocus=false; jpInput.ZIndex=5; jpInput.Parent=page
+	mkCorner(jpInput,UDim.new(0,4)); mkStroke(jpInput,C.inputBdr,1)
+
+	local HALF2=math.floor((CW-6)/2)
+	mkBtn(page,"SET JUMP",C.btnCyan,C.btnCyanDk,HALF2,34,PAD,260,function()
+		local u=spdPlayer.Text:match("^%s*(.-)%s*$"); local v=tonumber(jpInput.Text)
+		if u=="" then showToast("Enter player name") return end
+		if not v then showToast("Invalid value") return end
+		adminRemote:FireServer("set_jump",u,v); showFeedback("Jump -> "..v.." for "..u)
+	end)
+	mkBtn(page,"RESET JUMP",C.btnOlive,C.btnOliveDk,HALF2,34,PAD+HALF2+6,260,function()
+		local u=spdPlayer.Text:match("^%s*(.-)%s*$")
+		if u=="" then showToast("Enter player name") return end
+		adminRemote:FireServer("set_jump",u,50); showFeedback("Jump reset for "..u)
+	end)
+end
+
+-- ── ITEMS (4) ─────────────────────────────────────────────────────────────
+do
+	local page=tabs[4].page; local CW=WIN_W-PAD*2
+	mkSectionLabel(page,"TARGET PLAYER",10)
+	local itmPlayer=Instance.new("TextBox")
+	itmPlayer.Size=UDim2.new(1,-PAD*2,0,32); itmPlayer.Position=UDim2.new(0,PAD,0,34)
+	itmPlayer.BackgroundColor3=C.inputBg; itmPlayer.BorderSizePixel=0
+	itmPlayer.PlaceholderText="Player name..."; itmPlayer.PlaceholderColor3=C.phCol
+	itmPlayer.Text=""; itmPlayer.TextColor3=C.inputText; itmPlayer.Font=Enum.Font.Gotham
+	itmPlayer.TextSize=13; itmPlayer.TextXAlignment=Enum.TextXAlignment.Center
+	itmPlayer.ClearTextOnFocus=false; itmPlayer.ZIndex=5; itmPlayer.Parent=page
+	mkCorner(itmPlayer,UDim.new(0,4)); mkStroke(itmPlayer,C.inputBdr,1)
+	attachDropdown(itmPlayer,page)
+
+	mkSectionLabel(page,"ITEM NAME",78)
+	local itmInput=Instance.new("TextBox")
+	itmInput.Size=UDim2.new(1,-PAD*2,0,32); itmInput.Position=UDim2.new(0,PAD,0,102)
+	itmInput.BackgroundColor3=C.inputBg; itmInput.BorderSizePixel=0
+	itmInput.PlaceholderText="Enter item name..."; itmInput.PlaceholderColor3=C.phCol
+	itmInput.Text=""; itmInput.TextColor3=C.inputText; itmInput.Font=Enum.Font.Gotham
+	itmInput.TextSize=13; itmInput.TextXAlignment=Enum.TextXAlignment.Center
+	itmInput.ClearTextOnFocus=false; itmInput.ZIndex=5; itmInput.Parent=page
+	mkCorner(itmInput,UDim.new(0,4)); mkStroke(itmInput,C.inputBdr,1)
+
+	local HALF=math.floor((CW-6)/2)
+	mkBtn(page,"GIVE ITEM",C.btnGreen,C.btnGreenDk,HALF,36,PAD,146,function()
+		local u=itmPlayer.Text:match("^%s*(.-)%s*$"); local itm=itmInput.Text:match("^%s*(.-)%s*$")
+		if u=="" then showToast("Enter player name") return end
+		if itm=="" then showToast("Enter item name") return end
+		adminRemote:FireServer("give_item",u,itm); showFeedback("Gave "..itm.." to "..u)
+	end)
+	mkBtn(page,"REMOVE ITEM",C.btnRed,C.btnRedDk,HALF,36,PAD+HALF+6,146,function()
+		local u=itmPlayer.Text:match("^%s*(.-)%s*$"); local itm=itmInput.Text:match("^%s*(.-)%s*$")
+		if u=="" then showToast("Enter player name") return end
+		if itm=="" then showToast("Enter item name") return end
+		adminRemote:FireServer("remove_item",u,itm); showFeedback("Removed "..itm.." from "..u)
+	end)
+	mkBtn(page,"CLEAR INVENTORY",C.btnOrange,C.btnOrangeDk,CW,36,PAD,190,function()
+		local u=itmPlayer.Text:match("^%s*(.-)%s*$")
+		if u=="" then showToast("Enter player name") return end
+		adminRemote:FireServer("clear_inv",u); showFeedback("Cleared inventory of "..u)
+	end)
+
+	mkSectionLabel(page,"MODERATION",238)
+	local MCOLS=5
+	local MBTNS={
+		{"KICK",C.btnOlive,C.btnOliveDk,function() openKickGui() end},
+		{"BAN",C.btnRed,C.btnRedDk,function() openBanGui() end},
+		{"UNBAN",C.btnGreen,C.btnGreenDk,function() openUnbanGui() end},
+		{"MUTE",C.btnOlive,C.btnOliveDk,function() openMuteGui() end},
+		{"UNMUTE",C.btnGreen,C.btnGreenDk,function() openUnmuteGui() end},
+	}
+	local mBW=math.floor((CW-(MCOLS-1)*5)/MCOLS)
+	for i,info in ipairs(MBTNS) do
+		mkBtn(page,info[1],info[2],info[3],mBW,32,PAD+(i-1)*(mBW+5),262,info[4])
+	end
+end
+
+-- ── FUSE MACHINE (5) ──────────────────────────────────────────────────────
+do
+	local page=tabs[5].page; local CW=WIN_W-PAD*2
+	mkSectionLabel(page,"DURATION (seconds)",28)
+	local durInput=Instance.new("TextBox")
+	durInput.Size=UDim2.new(1,-PAD*2,0,36); durInput.Position=UDim2.new(0,PAD,0,54)
+	durInput.BackgroundColor3=C.inputBg; durInput.BorderSizePixel=0
+	durInput.PlaceholderText="0 seconds"; durInput.PlaceholderColor3=C.phCol
+	durInput.Text=""; durInput.TextColor3=C.inputText; durInput.Font=Enum.Font.Gotham
+	durInput.TextSize=13; durInput.TextXAlignment=Enum.TextXAlignment.Center
+	durInput.ClearTextOnFocus=false; durInput.ZIndex=5; durInput.Parent=page
+	mkCorner(durInput,UDim.new(0,4)); mkStroke(durInput,C.inputBdr,1)
+
+	local HALF=math.floor((CW-6)/2)
+	mkBtn(page,"GIVE LUCK",C.btnGreen,C.btnGreenDk,HALF,38,PAD,104,function()
+		local d=tonumber(durInput.Text)
+		if not d then showToast("Enter a duration in seconds") return end
+		adminRemote:FireServer("fuse_give_luck",d); showFeedback("Give Luck fired — duration: "..d.."s")
+	end)
+	mkBtn(page,"SKIP FUSE",C.fuseMachine,C.fuseMachineDk,HALF,38,PAD+HALF+6,104,function()
+		adminRemote:FireServer("fuse_skip"); showFeedback("Fuse skip fired")
+	end)
+
+	local fhint=Instance.new("TextLabel"); fhint.Size=UDim2.new(1,-PAD*2,0,16)
+	fhint.Position=UDim2.new(0,PAD,0,154); fhint.BackgroundTransparency=1
+	fhint.Text="· CLICK TO TOGGLE ON/OFF ·"; fhint.TextColor3=C.winBorder
+	fhint.Font=Enum.Font.Gotham; fhint.TextSize=11
+	fhint.TextXAlignment=Enum.TextXAlignment.Center; fhint.ZIndex=5; fhint.Parent=page
+
+	local fuseGlobalOn=true; local fuseGlbBtn
+	fuseGlbBtn=mkBtn(page,"GLOBAL:  ON",C.glbOn,C.btnGreenDk,math.floor(CW*0.5),34,PAD+math.floor(CW*0.25),174,function()
+		fuseGlobalOn=not fuseGlobalOn
+		fuseGlbBtn.Text=fuseGlobalOn and "GLOBAL:  ON" or "GLOBAL:  OFF"
+		fuseGlbBtn.BackgroundColor3=fuseGlobalOn and C.glbOn or C.glbOff
+		adminRemote:FireServer("fuse_set_global",fuseGlobalOn)
+	end)
+end
+
+-- ── BAN LOGS (6) ──────────────────────────────────────────────────────────
+do
+	local page=tabs[6].page; local CW=WIN_W-PAD*2
+	local COL_WIDTHS={0.28,0.20,0.22,0.16,0.14}
+	local COL_LABELS={"USERNAME","MODERATOR","REASON","DURATION","PERMANENT"}
+
+	local headerBar=Instance.new("Frame")
+	headerBar.Size=UDim2.new(1,-PAD*2,0,26); headerBar.Position=UDim2.new(0,PAD,0,8)
+	headerBar.BackgroundColor3=C.headerBg; headerBar.BorderSizePixel=0
+	headerBar.ZIndex=5; headerBar.Parent=page; mkCorner(headerBar,UDim.new(0,3))
+
+	local xOff=8
+	for ci,lbl in ipairs(COL_LABELS) do
+		local colW=math.floor(CW*COL_WIDTHS[ci])
+		local hLbl=Instance.new("TextLabel")
+		hLbl.Size=UDim2.new(0,colW,1,0); hLbl.Position=UDim2.new(0,xOff,0,0)
+		hLbl.BackgroundTransparency=1; hLbl.Text=lbl; hLbl.TextColor3=C.winBorder
+		hLbl.Font=Enum.Font.GothamBold; hLbl.TextSize=10
+		hLbl.TextXAlignment=Enum.TextXAlignment.Left; hLbl.ZIndex=6; hLbl.Parent=headerBar
+		xOff+=colW
+	end
+
+	local logScroll=Instance.new("ScrollingFrame")
+	logScroll.Size=UDim2.new(1,-PAD*2,1,-90); logScroll.Position=UDim2.new(0,PAD,0,40)
+	logScroll.BackgroundTransparency=1; logScroll.BorderSizePixel=0
+	logScroll.ScrollBarThickness=4; logScroll.ScrollBarImageColor3=C.winBorder
+	logScroll.CanvasSize=UDim2.new(0,0,0,0); logScroll.AutomaticCanvasSize=Enum.AutomaticSize.Y
+	logScroll.ScrollingDirection=Enum.ScrollingDirection.Y; logScroll.ZIndex=5; logScroll.Parent=page
+
+	local logLayout=Instance.new("UIListLayout")
+	logLayout.SortOrder=Enum.SortOrder.LayoutOrder; logLayout.Padding=UDim.new(0,2); logLayout.Parent=logScroll
+
+	local banLogData={}
+	local function rebuildLogRows()
+		for _,ch in ipairs(logScroll:GetChildren()) do if ch:IsA("Frame") then ch:Destroy() end end
+		local emptyLbl=logScroll:FindFirstChild("EmptyLabel"); if emptyLbl then emptyLbl:Destroy() end
+		if #banLogData==0 then
+			local empty=Instance.new("TextLabel"); empty.Name="EmptyLabel"
+			empty.Size=UDim2.new(1,0,0,36); empty.BackgroundTransparency=1
+			empty.Text="No ban records found."; empty.TextColor3=C.textDim
+			empty.Font=Enum.Font.Gotham; empty.TextSize=12
+			empty.TextXAlignment=Enum.TextXAlignment.Center; empty.ZIndex=6
+			empty.LayoutOrder=1; empty.Parent=logScroll; return
+		end
+		for i,entry in ipairs(banLogData) do
+			local rowBg=(i%2==0) and C.banLogAlt or C.banLogRow
+			local row=Instance.new("Frame"); row.Name="BanRow_"..i
+			row.Size=UDim2.new(1,0,0,28); row.BackgroundColor3=rowBg
+			row.BorderSizePixel=0; row.ZIndex=6; row.LayoutOrder=i; row.Parent=logScroll
+			mkCorner(row,UDim.new(0,2))
+			local vals={entry.username or "—",entry.moderator or "—",entry.reason or "—",entry.duration or "—",entry.permanent and "YES" or "NO"}
+			local xo=8
+			for ci,val in ipairs(vals) do
+				local colW=math.floor(CW*COL_WIDTHS[ci])
+				local cell=Instance.new("TextLabel")
+				cell.Size=UDim2.new(0,colW-4,1,0); cell.Position=UDim2.new(0,xo,0,0)
+				cell.BackgroundTransparency=1; cell.Text=val
+				cell.TextColor3=(ci==5) and (entry.permanent and C.banPerm or C.banTemp) or C.text
+				cell.Font=Enum.Font.Gotham; cell.TextSize=11
+				cell.TextXAlignment=Enum.TextXAlignment.Left
+				cell.TextTruncate=Enum.TextTruncate.AtEnd; cell.ZIndex=7; cell.Parent=row
+				xo+=colW
+			end
+		end
+	end
+	rebuildLogRows()
+
+	mkBtn(page,"↺  REFRESH",C.btnCyan,C.btnCyanDk,120,30,PAD,CONTENT_H-38,function()
+		adminRemote:FireServer("get_ban_logs"); showFeedback("Refreshing ban logs...")
+	end)
+	mkBtn(page,"CLEAR ALL",C.btnRed,C.btnRedDk,120,30,PAD+126,CONTENT_H-38,function()
+		banLogData={}; rebuildLogRows()
+		adminRemote:FireServer("clear_ban_logs"); showFeedback("Ban logs cleared")
+	end)
+
+	local banLogRemote=ReplicatedStorage:FindFirstChild("BanLogRemote")
+	if banLogRemote then
+		banLogRemote.OnClientEvent:Connect(function(data)
+			if type(data)=="table" then banLogData=data; rebuildLogRows() end
+		end)
+	end
+
+	_G.__adminAppendBanLog=function(entry)
+		table.insert(banLogData,1,entry); rebuildLogRows()
+	end
+end
+
+-- ── MISC (7) ──────────────────────────────────────────────────────────────
+do
+	local page=tabs[7].page; local CW=WIN_W-PAD*2
+	mkSectionLabel(page,"TARGET PLAYER",10)
+	local targetInput=Instance.new("TextBox")
+	targetInput.Size=UDim2.new(1,-PAD*2,0,32); targetInput.Position=UDim2.new(0,PAD,0,34)
+	targetInput.BackgroundColor3=C.inputBg; targetInput.BorderSizePixel=0
+	targetInput.PlaceholderText="Enter player name..."; targetInput.PlaceholderColor3=C.phCol
+	targetInput.Text=""; targetInput.TextColor3=C.inputText; targetInput.Font=Enum.Font.Gotham
+	targetInput.TextSize=13; targetInput.TextXAlignment=Enum.TextXAlignment.Center
+	targetInput.ClearTextOnFocus=false; targetInput.ZIndex=5; targetInput.Parent=page
+	mkCorner(targetInput,UDim.new(0,4)); mkStroke(targetInput,C.inputBdr,1)
+	attachDropdown(targetInput,page)
+
+	local GRID_BTNS={
+		{"TOGGLE INVIS",C.btnRed,  C.btnRedDk,  function() adminRemote:FireServer("invisible_on", targetInput.Text:match("^%s*(.-)%s*$")) end},
+		{"EXPLODE",     C.btnRed,  C.btnRedDk,  function() adminRemote:FireServer("explode",      targetInput.Text:match("^%s*(.-)%s*$")) end},
+		{"FLING",       C.btnRed,  C.btnRedDk,  function() adminRemote:FireServer("fling",        targetInput.Text:match("^%s*(.-)%s*$")) end},
+		{"FREEZE",      C.btnGreen,C.btnGreenDk,function() adminRemote:FireServer("freeze",       targetInput.Text:match("^%s*(.-)%s*$")) end},
+		{"KICK",        C.btnOlive,C.btnOliveDk,function() openKickGui() end},
+		{"BAN",         C.btnRed,  C.btnRedDk,  function() openBanGui()  end},
+		{"TP TO",       C.btnGreen,C.btnGreenDk,function() adminRemote:FireServer("tp_to",        targetInput.Text:match("^%s*(.-)%s*$")) end},
+		{"TP HERE",     C.btnGreen,C.btnGreenDk,function() adminRemote:FireServer("tp_here",      targetInput.Text:match("^%s*(.-)%s*$")) end},
+		{"INVIS ON",    C.btnGreen,C.btnGreenDk,function() adminRemote:FireServer("invisible_on", targetInput.Text:match("^%s*(.-)%s*$")) end},
+		{"INVIS OFF",   C.btnRed,  C.btnRedDk,  function() adminRemote:FireServer("invisible_off",targetInput.Text:match("^%s*(.-)%s*$")) end},
+	}
+
+	local COLS=5; local BTN_H2=36; local BTN_GAP=5
+	local BTN_W2=math.floor((CW-BTN_GAP*(COLS-1))/COLS)
+	local START_Y=74
+
+	for i,info in ipairs(GRID_BTNS) do
+		local col=(i-1)%COLS; local row=math.floor((i-1)/COLS)
+		local xPos=PAD+col*(BTN_W2+BTN_GAP); local yPos=START_Y+row*(BTN_H2+BTN_GAP)
+		local cb=info[4]
+		mkBtn(page,info[1],info[2],info[3],BTN_W2,BTN_H2,xPos,yPos,function()
+			local u=targetInput.Text:match("^%s*(.-)%s*$")
+			if u=="" and info[1]~="BAN" and info[1]~="KICK" then
+				showToast("Enter a player name first") return
+			end
+			cb()
+		end)
+	end
+
+	local glbOn=false
+	local glbBtnY=START_Y+2*(BTN_H2+BTN_GAP)+10
+	local glbHint=Instance.new("TextLabel"); glbHint.Size=UDim2.new(1,-PAD*2,0,16)
+	glbHint.Position=UDim2.new(0,PAD,0,glbBtnY); glbHint.BackgroundTransparency=1
+	glbHint.Text="· CLICK TO TOGGLE ON/OFF ·"; glbHint.TextColor3=C.winBorder
+	glbHint.Font=Enum.Font.Gotham; glbHint.TextSize=11
+	glbHint.TextXAlignment=Enum.TextXAlignment.Center; glbHint.ZIndex=5; glbHint.Parent=page
+
+	local glbBtn
+	glbBtn=mkBtn(page,"GLOBAL:  OFF",C.glbOff,C.btnRedDk,math.floor(CW*0.5),34,PAD+math.floor(CW*0.25),glbBtnY+18,function()
+		glbOn=not glbOn
+		glbBtn.Text=glbOn and "GLOBAL:  ON" or "GLOBAL:  OFF"
+		glbBtn.BackgroundColor3=glbOn and C.glbOn or C.glbOff
+		adminRemote:FireServer("set_global",glbOn)
+	end)
+end
+
+-- =====================================================
+-- HUD OPEN BUTTON
+-- =====================================================
+local hudGui=Instance.new("ScreenGui")
+hudGui.Name="AdminHudGui"; hudGui.ResetOnSpawn=false
+hudGui.ZIndexBehavior=Enum.ZIndexBehavior.Sibling; hudGui.IgnoreGuiInset=true
+hudGui.DisplayOrder=16; hudGui.Parent=playerGui
+
+local openBtn=Instance.new("ImageButton")
+openBtn.Name="AdminOpenBtn"; openBtn.AnchorPoint=Vector2.new(1,0)
+openBtn.Position=UDim2.new(1,-12,0,8); openBtn.Size=UDim2.new(0,38,0,38)
+openBtn.BackgroundColor3=C.hudBg; openBtn.BorderSizePixel=0
+openBtn.Image=""; openBtn.AutoButtonColor=false; openBtn.ZIndex=2; openBtn.Parent=hudGui
+mkCorner(openBtn,UDim.new(1,0))
+local oBtnStroke=mkStroke(openBtn,C.winBorder,2)
+
+local adminIcon=Instance.new("ImageLabel")
+adminIcon.AnchorPoint=Vector2.new(0.5,0.5); adminIcon.Position=UDim2.new(0.5,0,0.5,0)
+adminIcon.Size=UDim2.new(0,22,0,22); adminIcon.BackgroundTransparency=1
+adminIcon.BorderSizePixel=0; adminIcon.Image="rbxassetid://108873670611147"
+adminIcon.ImageColor3=C.winBorder; adminIcon.ScaleType=Enum.ScaleType.Fit
+adminIcon.ZIndex=3; adminIcon.Parent=openBtn
+
+openBtn.MouseEnter:Connect(function()
+	TweenService:Create(openBtn,    TF,{BackgroundColor3=Color3.fromRGB(18,26,26)}):Play()
+	TweenService:Create(oBtnStroke, TF,{Color=Color3.fromRGB(0,255,240)}):Play()
+	TweenService:Create(adminIcon,  TF,{ImageColor3=Color3.fromRGB(0,255,240)}):Play()
+end)
+openBtn.MouseLeave:Connect(function()
+	TweenService:Create(openBtn,    TF,{BackgroundColor3=C.hudBg}):Play()
+	TweenService:Create(oBtnStroke, TF,{Color=C.winBorder}):Play()
+	TweenService:Create(adminIcon,  TF,{ImageColor3=C.winBorder}):Play()
+end)
+openBtn.MouseButton1Down:Connect(function()
+	TweenService:Create(openBtn,TweenInfo.new(0.06),{BackgroundColor3=Color3.fromRGB(0,40,38)}):Play()
+end)
+openBtn.MouseButton1Up:Connect(function()
+	TweenService:Create(openBtn,TF,{BackgroundColor3=Color3.fromRGB(18,26,26)}):Play()
+end)
+openBtn.MouseButton1Click:Connect(function()
+	if mainPanel.Visible then
+		TweenService:Create(mainPanel,TC,{Size=UDim2.new(0,WIN_W,0,8)}):Play()
+		task.delay(0.17,function()
+			mainPanel.Visible=false
+			mainPanel.Size=UDim2.new(0,WIN_W,0,WIN_H)
+			mainPanel.ClipsDescendants=false
+			panelMinimized=false
+			panelMinBtn.Text="-"
+		end)
+	else
+		mainPanel.Visible=true
+		mainPanel.Size=UDim2.new(0,WIN_W,0,8)
+		TweenService:Create(mainPanel,TO,{Size=UDim2.new(0,WIN_W,0,WIN_H)}):Play()
+	end
+end)
+
+-- =====================================================
+-- KEYBIND  (Tilde ` to toggle)
+-- =====================================================
+UserInputService.InputBegan:Connect(function(inp,gpe)
+	if gpe then return end
+	if inp.KeyCode==Enum.KeyCode.Tilde then
+		openBtn.MouseButton1Click:Fire()
+	end
+end)
