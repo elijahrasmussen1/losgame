@@ -24,19 +24,9 @@ if not waveGui then
 	warn("[WaveMachine] WaveGUIMain not found inside REAL"); return
 end
 
-local wavePage1 = realHud:WaitForChild("WaveGUIPage1", 30)
-if not wavePage1 then
-	warn("[WaveMachine] WaveGUIPage1 not found inside REAL")
-end
-
 local closeBtn = waveGui:FindFirstChild("CloseButtonMain", true)
 if not closeBtn then
 	warn("[WaveMachine] CloseButtonMain not found")
-end
-
-local rainbowInfoBtn = waveGui:FindFirstChild("RainbowInfo", true)
-if not rainbowInfoBtn then
-	warn("[WaveMachine] RainbowInfo not found inside WaveGUIMain")
 end
 
 -- =====================================================
@@ -110,6 +100,9 @@ local CLOSE_INFO = TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirect
 -- how close the player needs to be to the part (studs)
 local PROXIMITY = 8
 
+-- forward declaration so closeGui can call it before pages are set up
+local closeAllPages
+
 -- =====================================================
 -- OPEN / CLOSE
 -- =====================================================
@@ -140,6 +133,9 @@ local function closeGui()
 	isOpen = false
 	stopTween()
 
+	-- also close any secondary info page that may be open
+	if closeAllPages then closeAllPages() end
+
 	activeTween = TweenService:Create(waveGui, CLOSE_INFO, { Position = offScreenPos })
 	activeTween:Play()
 
@@ -166,76 +162,116 @@ waveGui.Visible  = false
 waveGui.Position = onScreenPos
 
 -- =====================================================
--- WAVEGUIPAGE1 — opened by RainbowInfo button
--- same slide-in/out logic as WaveGUIMain
+-- SECONDARY PAGES (Page1–Page6)
+-- Info button inside WaveGUIMain → opens matching page
+-- Closing WaveGUIMain (StopWater / proximity) closes any open page too
 -- =====================================================
-local isPage1Open      = false
-local activePage1Tween = nil
+local PAGE_DEFS = {
+	{ name = "WaveGUIPage1", infoBtn = "RainbowInfo"  },
+	{ name = "WaveGUIPage2", infoBtn = "BouncyInfo"   },
+	{ name = "WaveGUIPage3", infoBtn = "SleepyInfo"   },
+	{ name = "WaveGUIPage4", infoBtn = "ChaosInfo"    },
+	{ name = "WaveGUIPage5", infoBtn = "NukeInfo"     },
+	{ name = "WaveGUIPage6", infoBtn = "OverflowInfo" },
+}
 
-local page1OnPos, page1OffPos
+local pages = {}
 
-if wavePage1 then
-	page1OnPos  = UDim2.new(
-		wavePage1.Position.X.Scale, wavePage1.Position.X.Offset,
-		wavePage1.Position.Y.Scale, wavePage1.Position.Y.Offset - 30
-	)
-	page1OffPos = UDim2.new(
-		wavePage1.Position.X.Scale, wavePage1.Position.X.Offset,
-		wavePage1.Position.Y.Scale, wavePage1.Position.Y.Offset + 50
-	)
+for _, def in ipairs(PAGE_DEFS) do
+	local gui = realHud:FindFirstChild(def.name)
+	if not gui then
+		warn("[WaveMachine] " .. def.name .. " not found inside REAL")
+	end
 
-	wavePage1.Visible  = false
-	wavePage1.Position = page1OnPos
+	local entry = {
+		gui         = gui,
+		isOpen      = false,
+		activeTween = nil,
+		onPos       = nil,
+		offPos      = nil,
+	}
+
+	if gui then
+		entry.onPos  = UDim2.new(
+			gui.Position.X.Scale, gui.Position.X.Offset,
+			gui.Position.Y.Scale, gui.Position.Y.Offset - 30
+		)
+		entry.offPos = UDim2.new(
+			gui.Position.X.Scale, gui.Position.X.Offset,
+			gui.Position.Y.Scale, gui.Position.Y.Offset + 50
+		)
+		gui.Visible  = false
+		gui.Position = entry.onPos
+	end
+
+	pages[#pages + 1] = entry
 end
 
-local function stopPage1Tween()
-	if activePage1Tween then
-		activePage1Tween:Cancel()
-		activePage1Tween = nil
+local function stopPageTween(p)
+	if p.activeTween then
+		p.activeTween:Cancel()
+		p.activeTween = nil
 	end
 end
 
-local function openPage1()
-	if not wavePage1 then return end
-	if isPage1Open then return end
-	isPage1Open = true
-	stopPage1Tween()
+local function openPage(p)
+	if not p.gui then return end
+	if p.isOpen then return end
+	p.isOpen = true
+	stopPageTween(p)
 
-	wavePage1.Position = page1OffPos
-	wavePage1.Visible  = true
+	p.gui.Position = p.offPos
+	p.gui.Visible  = true
 
-	activePage1Tween = TweenService:Create(wavePage1, OPEN_INFO, { Position = page1OnPos })
-	activePage1Tween:Play()
+	p.activeTween = TweenService:Create(p.gui, OPEN_INFO, { Position = p.onPos })
+	p.activeTween:Play()
 end
 
-local function closePage1()
-	if not wavePage1 then return end
-	if not isPage1Open then return end
-	isPage1Open = false
-	stopPage1Tween()
+local function closePage(p)
+	if not p.gui then return end
+	if not p.isOpen then return end
+	p.isOpen = false
+	stopPageTween(p)
 
-	activePage1Tween = TweenService:Create(wavePage1, CLOSE_INFO, { Position = page1OffPos })
-	activePage1Tween:Play()
+	p.activeTween = TweenService:Create(p.gui, CLOSE_INFO, { Position = p.offPos })
+	p.activeTween:Play()
 
 	task.delay(0.26, function()
-		if not isPage1Open then
-			wavePage1.Visible  = false
-			wavePage1.Position = page1OnPos
+		if not p.isOpen then
+			p.gui.Visible  = false
+			p.gui.Position = p.onPos
 		end
 	end)
 end
 
--- RainbowInfo click → open Page1
-if rainbowInfoBtn then
-	rainbowInfoBtn.MouseButton1Click:Connect(openPage1)
+-- define the forward-declared closeAllPages
+closeAllPages = function()
+	for _, p in ipairs(pages) do
+		closePage(p)
+	end
 end
 
--- look for a close button inside WaveGUIPage1 (optional)
-if wavePage1 then
-	local page1CloseBtn = wavePage1:FindFirstChild("CloseButtonMain", true)
-		or wavePage1:FindFirstChild("CloseButton", true)
-	if page1CloseBtn then
-		page1CloseBtn.MouseButton1Click:Connect(closePage1)
+-- wire info buttons → open page, and optional in-page close button
+for i, def in ipairs(PAGE_DEFS) do
+	local infoBtn = waveGui:FindFirstChild(def.infoBtn, true)
+	if infoBtn then
+		local pg = pages[i]
+		infoBtn.MouseButton1Click:Connect(function()
+			openPage(pg)
+		end)
+	else
+		warn("[WaveMachine] " .. def.infoBtn .. " not found inside WaveGUIMain")
+	end
+
+	local pg = pages[i]
+	if pg.gui then
+		local closeB = pg.gui:FindFirstChild("CloseButtonMain", true)
+			or pg.gui:FindFirstChild("CloseButton", true)
+		if closeB then
+			closeB.MouseButton1Click:Connect(function()
+				closePage(pg)
+			end)
+		end
 	end
 end
 
