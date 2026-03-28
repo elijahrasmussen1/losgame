@@ -24,9 +24,19 @@ if not waveGui then
 	warn("[WaveMachine] WaveGUIMain not found inside REAL"); return
 end
 
+local wavePage1 = realHud:WaitForChild("WaveGUIPage1", 30)
+if not wavePage1 then
+	warn("[WaveMachine] WaveGUIPage1 not found inside REAL")
+end
+
 local closeBtn = waveGui:FindFirstChild("CloseButtonMain", true)
 if not closeBtn then
 	warn("[WaveMachine] CloseButtonMain not found")
+end
+
+local rainbowInfoBtn = waveGui:FindFirstChild("RainbowInfo", true)
+if not rainbowInfoBtn then
+	warn("[WaveMachine] RainbowInfo not found inside WaveGUIMain")
 end
 
 -- =====================================================
@@ -154,6 +164,80 @@ end
 -- =====================================================
 waveGui.Visible  = false
 waveGui.Position = onScreenPos
+
+-- =====================================================
+-- WAVEGUIPAGE1 — opened by RainbowInfo button
+-- same slide-in/out logic as WaveGUIMain
+-- =====================================================
+local isPage1Open      = false
+local activePage1Tween = nil
+
+local page1OnPos, page1OffPos
+
+if wavePage1 then
+	page1OnPos  = UDim2.new(
+		wavePage1.Position.X.Scale, wavePage1.Position.X.Offset,
+		wavePage1.Position.Y.Scale, wavePage1.Position.Y.Offset - 30
+	)
+	page1OffPos = UDim2.new(
+		wavePage1.Position.X.Scale, wavePage1.Position.X.Offset,
+		wavePage1.Position.Y.Scale, wavePage1.Position.Y.Offset + 50
+	)
+
+	wavePage1.Visible  = false
+	wavePage1.Position = page1OnPos
+end
+
+local function stopPage1Tween()
+	if activePage1Tween then
+		activePage1Tween:Cancel()
+		activePage1Tween = nil
+	end
+end
+
+local function openPage1()
+	if not wavePage1 then return end
+	if isPage1Open then return end
+	isPage1Open = true
+	stopPage1Tween()
+
+	wavePage1.Position = page1OffPos
+	wavePage1.Visible  = true
+
+	activePage1Tween = TweenService:Create(wavePage1, OPEN_INFO, { Position = page1OnPos })
+	activePage1Tween:Play()
+end
+
+local function closePage1()
+	if not wavePage1 then return end
+	if not isPage1Open then return end
+	isPage1Open = false
+	stopPage1Tween()
+
+	activePage1Tween = TweenService:Create(wavePage1, CLOSE_INFO, { Position = page1OffPos })
+	activePage1Tween:Play()
+
+	task.delay(0.26, function()
+		if not isPage1Open then
+			wavePage1.Visible  = false
+			wavePage1.Position = page1OnPos
+		end
+	end)
+end
+
+-- RainbowInfo click → open Page1
+if rainbowInfoBtn then
+	rainbowInfoBtn.MouseButton1Click:Connect(openPage1)
+end
+
+-- look for a close button inside WaveGUIPage1 (optional)
+if wavePage1 then
+	local page1CloseBtn = wavePage1:FindFirstChild("CloseButtonMain", true)
+		or wavePage1:FindFirstChild("CloseButton", true)
+	if page1CloseBtn then
+		page1CloseBtn.MouseButton1Click:Connect(closePage1)
+	end
+end
 
 -- =====================================================
 -- CLOSE BUTTON
