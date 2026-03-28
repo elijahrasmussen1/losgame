@@ -1,13 +1,15 @@
 -- WaveMachine.client.lua
 -- Place in StarterPlayerScripts
 
-local Players      = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
-local RunService   = game:GetService("RunService")
+local Players           = game:GetService("Players")
+local TweenService      = game:GetService("TweenService")
+local RunService        = game:GetService("RunService")
+local UserInputService  = game:GetService("UserInputService")
 
 local player    = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 local character = player.Character or player.CharacterAdded:Wait()
+local camera    = workspace.CurrentCamera
 
 -- =====================================================
 -- FIND THE GUI
@@ -28,6 +30,58 @@ if not closeBtn then
 end
 
 -- =====================================================
+-- MOBILE SCALING
+-- =====================================================
+-- The GUI is authored for a ~1280×650 PC viewport.
+-- On mobile we shrink it via UIScale and center it so
+-- nothing overflows the smaller screen.
+local DESIGN_WIDTH  = 1280
+local DESIGN_HEIGHT = 650
+
+local function applyMobileScaling()
+	local vp       = camera.ViewportSize
+	local isMobile = UserInputService.TouchEnabled
+
+	-- uniform scale that fits the GUI inside the current viewport
+	local scaleX = vp.X / DESIGN_WIDTH
+	local scaleY = vp.Y / DESIGN_HEIGHT
+	local scale  = math.min(scaleX, scaleY)
+	if not isMobile then
+		scale = math.min(scale, 1)  -- never upscale on PC
+	end
+
+	-- apply (or update) UIScale child
+	local uiScale = waveGui:FindFirstChildOfClass("UIScale")
+	if not uiScale then
+		uiScale = Instance.new("UIScale")
+		uiScale.Parent = waveGui
+	end
+	uiScale.Scale = scale
+
+	-- on touch devices, center the panel so it's never off-edge
+	if isMobile then
+		waveGui.AnchorPoint = Vector2.new(0.5, 0.5)
+		waveGui.Position    = UDim2.new(0.5, 0, 0.5, 0)
+	end
+end
+
+applyMobileScaling()
+
+-- re-apply whenever the viewport changes (rotation, resize)
+camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
+	applyMobileScaling()
+	-- rebuild tween targets after a layout change
+	onScreenPos = UDim2.new(
+		waveGui.Position.X.Scale,  waveGui.Position.X.Offset,
+		waveGui.Position.Y.Scale,  waveGui.Position.Y.Offset - 30
+	)
+	offScreenPos = UDim2.new(
+		waveGui.Position.X.Scale,  waveGui.Position.X.Offset,
+		waveGui.Position.Y.Scale,  waveGui.Position.Y.Offset + 50
+	)
+end)
+
+-- =====================================================
 -- POSITIONS
 -- =====================================================
 local onScreenPos = UDim2.new(
@@ -38,6 +92,7 @@ local offScreenPos = UDim2.new(
 	waveGui.Position.X.Scale, waveGui.Position.X.Offset,
 	waveGui.Position.Y.Scale, waveGui.Position.Y.Offset + 50
 )
+-- (these are reassigned by the ViewportSize listener on orientation change)
 
 local OPEN_INFO  = TweenInfo.new(0.35, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
 local CLOSE_INFO = TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
