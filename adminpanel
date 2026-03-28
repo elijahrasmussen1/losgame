@@ -183,7 +183,28 @@ local function isAdmin()
 	end
 	return false
 end
-if not isAdmin() then return end
+if not isAdmin() then
+	-- =====================================================
+	-- SPEED DISPLAY — runs for every player
+	-- Updates "Speed" TextLabel inside any "Abilities" Frame
+	-- when the server fires SpeedUpdateRemote to this client
+	-- =====================================================
+	local speedUpdateRemote = ReplicatedStorage:WaitForChild("SpeedUpdateRemote", 30)
+	if speedUpdateRemote then
+		speedUpdateRemote.OnClientEvent:Connect(function(_level, walkSpeed)
+			for _, gui in ipairs(playerGui:GetChildren()) do
+				local abilities = gui:FindFirstChild("Abilities", true)
+				if abilities then
+					local lbl = abilities:FindFirstChild("Speed", true)
+					if lbl and lbl:IsA("TextLabel") then
+						lbl.Text = tostring(math.floor(walkSpeed))
+					end
+				end
+			end
+		end)
+	end
+	return
+end
 if playerGui:FindFirstChild("AdminDashboard") then return end
 
 -- =====================================================
@@ -191,6 +212,26 @@ if playerGui:FindFirstChild("AdminDashboard") then return end
 -- =====================================================
 local adminRemote = ReplicatedStorage:WaitForChild("AdminRemote", 30)
 if not adminRemote then warn("[AdminDashboard] AdminRemote not found!"); return end
+
+-- =====================================================
+-- SPEED DISPLAY (admin players)
+-- Same listener as non-admins — updates "Speed" TextLabel
+-- in "Abilities" frame when this admin's own speed changes
+-- =====================================================
+local speedUpdateRemote = ReplicatedStorage:WaitForChild("SpeedUpdateRemote", 30)
+if speedUpdateRemote then
+	speedUpdateRemote.OnClientEvent:Connect(function(_level, walkSpeed)
+		for _, gui in ipairs(playerGui:GetChildren()) do
+			local abilities = gui:FindFirstChild("Abilities", true)
+			if abilities then
+				local lbl = abilities:FindFirstChild("Speed", true)
+				if lbl and lbl:IsA("TextLabel") then
+					lbl.Text = tostring(math.floor(walkSpeed))
+				end
+			end
+		end
+	end)
+end
 
 -- =====================================================
 -- COLOURS

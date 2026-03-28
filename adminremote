@@ -74,6 +74,32 @@ local function waveCoinApiCall(action, player, amount)
 end
 
 -- =====================================================
+-- SPEED API  (wait for SpeedSystem to be ready)
+-- =====================================================
+local speedAPIBindable = ServerStorage:WaitForChild("SpeedAPIBindable", 30)
+if not speedAPIBindable then
+	warn("[AdminRemote] SpeedAPIBindable not found — speed commands will fall back to direct WalkSpeed")
+end
+
+local function speedApiCall(action, player, value)
+	if not speedAPIBindable then
+		-- fallback: set WalkSpeed directly without level tracking
+		local char = player.Character
+		local hum  = char and char:FindFirstChildOfClass("Humanoid")
+		if hum and action == "SetWalkSpeed" then hum.WalkSpeed = tonumber(value) or 16 end
+		return tonumber(value) or 16
+	end
+	local ok, result = pcall(function()
+		return speedAPIBindable:Invoke(action, player, value)
+	end)
+	if not ok then
+		warn("[AdminRemote] SpeedAPI call failed (" .. action .. "):", result)
+		return nil
+	end
+	return result
+end
+
+-- =====================================================
 -- ADMIN LIST
 -- =====================================================
 local adminUserIds = { 135740528, 8830142974, 541166467, 2741916860, 4178881808, 4099915549 }
@@ -565,9 +591,7 @@ adminRemote.OnServerEvent:Connect(function(sender, action, arg1, arg2, arg3)
 	-- ── SPEED / JUMP ──────────────────────────────────────────────────────────
 	if action == "set_speed" then
 		local t = findPlayer(tostring(arg1 or "")); if not t then return end
-		local char = t.Character; if not char then return end
-		local hum = char:FindFirstChildOfClass("Humanoid"); if not hum then return end
-		hum.WalkSpeed = tonumber(arg2) or 16; return
+		speedApiCall("SetWalkSpeed", t, tonumber(arg2) or 16); return
 	end
 	if action == "set_jump" then
 		local t = findPlayer(tostring(arg1 or "")); if not t then return end

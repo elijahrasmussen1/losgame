@@ -1,1 +1,122 @@
+-- SpeedSystem.server.lua
+-- Place in ServerScriptService
+--
+-- Tracks a "speed level" per player.
+-- WalkSpeed  =  BASE_SPEED + (level * SPEED_PER_LEVEL)
+-- Level 0  →  WalkSpeed 16  (Roblox default)
+-- Level 1  →  WalkSpeed 18, level 2 → 20, etc.
+--
+-- Exposes:
+--   ReplicatedStorage.SpeedUpdateRemote  (RemoteEvent)
+--     → fires to the target client:  (level: number, walkSpeed: number)
+--   ServerStorage.SpeedAPIBindable       (BindableFunction)
+--     → server-to-server API used by AdminRemote
 
+local Players           = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerStorage     = game:GetService("ServerStorage")
+
+-- =====================================================
+-- CONFIG
+-- =====================================================
+local BASE_SPEED      = 16  -- WalkSpeed at level 0
+local SPEED_PER_LEVEL = 2   -- each +1 level adds this to WalkSpeed
+
+-- =====================================================
+-- REMOTES / BINDABLES
+-- =====================================================
+local function getOrCreate(parent, name, class)
+	local obj = parent:FindFirstChild(name)
+	if not obj then
+		obj        = Instance.new(class)
+		obj.Name   = name
+		obj.Parent = parent
+	end
+	return obj
+end
+
+local speedRemote = getOrCreate(ReplicatedStorage, "SpeedUpdateRemote", "RemoteEvent")
+local speedAPI    = getOrCreate(ServerStorage,     "SpeedAPIBindable",  "BindableFunction")
+
+-- =====================================================
+-- STATE
+-- =====================================================
+local speedLevels = {}  -- [userId] = level (integer ≥ 0)
+
+-- =====================================================
+-- HELPERS
+-- =====================================================
+local function walkSpeedForLevel(level)
+	return BASE_SPEED + level * SPEED_PER_LEVEL
+end
+
+local function applyToCharacter(player, level)
+	local char = player.Character
+	local hum  = char and char:FindFirstChildOfClass("Humanoid")
+	if hum then
+		hum.WalkSpeed = walkSpeedForLevel(level)
+	end
+end
+
+local function setLevel(player, level)
+	level = math.max(0, math.floor(tonumber(level) or 0))
+	speedLevels[player.UserId] = level
+	applyToCharacter(player, level)
+	speedRemote:FireClient(player, level, walkSpeedForLevel(level))
+	return walkSpeedForLevel(level)
+end
+
+local function getLevel(player)
+	return speedLevels[player.UserId] or 0
+end
+
+-- =====================================================
+-- PLAYER LIFECYCLE
+-- =====================================================
+local function onCharacterAdded(player)
+	player.CharacterAdded:Connect(function()
+		task.wait()  -- let Humanoid load
+		local level = speedLevels[player.UserId] or 0
+		applyToCharacter(player, level)
+		-- re-fire so client UI refreshes after respawn
+		speedRemote:FireClient(player, level, walkSpeedForLevel(level))
+	end)
+end
+
+Players.PlayerAdded:Connect(function(player)
+	speedLevels[player.UserId] = 0
+	onCharacterAdded(player)
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+	speedLevels[player.UserId] = nil
+end)
+
+-- handle players already in the game when this script runs
+for _, player in ipairs(Players:GetPlayers()) do
+	if not speedLevels[player.UserId] then
+		speedLevels[player.UserId] = 0
+	end
+	onCharacterAdded(player)
+end
+
+-- =====================================================
+-- BINDABLE API (called by AdminRemote server script)
+-- =====================================================
+-- Supported actions:
+--   "SetLevel"     (player, level)      → set speed level, return walkSpeed
+--   "GetLevel"     (player)             → return current level
+--   "SetWalkSpeed" (player, walkSpeed)  → convert to nearest level, apply
+speedAPI.OnInvoke = function(action, player, value)
+	if action == "SetLevel" then
+		return setLevel(player, value)
+	elseif action == "GetLevel" then
+		return getLevel(player)
+	elseif action == "SetWalkSpeed" then
+		local ws    = tonumber(value) or BASE_SPEED
+		local level = math.max(0, math.round((ws - BASE_SPEED) / SPEED_PER_LEVEL))
+		return setLevel(player, level)
+	end
+end
+
+warn("[SpeedSystem] Ready — BASE_SPEED=" .. BASE_SPEED .. " SPEED_PER_LEVEL=" .. SPEED_PER_LEVEL)
