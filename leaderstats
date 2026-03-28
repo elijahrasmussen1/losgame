@@ -1,6 +1,7 @@
 -- ServerScriptService/LeaderStats.server.lua
 -- NOTE: Cash is fully managed by MoneyService.server.lua
--- This script only manages Speed and Rebirths preservation across deaths
+-- Speed is fully managed by SpeedSystem.server.lua (pushes WalkSpeed to leaderstats.Speed)
+-- This script only manages Rebirths preservation across deaths
 
 local Players = game:GetService("Players")
 
@@ -25,22 +26,19 @@ Players.PlayerAdded:Connect(function(player)
 		return stat
 	end
 
-	local speed    = ensureStat("Speed")
+	ensureStat("Speed")   -- SpeedSystem writes the actual value; we just ensure the slot exists
 	local rebirths = ensureStat("Rebirths")
 
-	-- Snapshot Speed and Rebirths on Died, restore on CharacterAdded
-	-- Cash is NOT touched here — MoneyService owns it entirely
-	local savedSpeed    = speed.Value
+	-- Snapshot Rebirths on Died, restore on CharacterAdded
+	-- Speed is NOT touched here — SpeedSystem owns it entirely
 	local savedRebirths = rebirths.Value
 
 	player.CharacterAdded:Connect(function(character)
-		speed.Value    = savedSpeed
 		rebirths.Value = savedRebirths
 
 		local humanoid = character:WaitForChild("Humanoid", 10)
 		if humanoid then
 			humanoid.Died:Connect(function()
-				savedSpeed    = speed.Value
 				savedRebirths = rebirths.Value
 			end)
 		end

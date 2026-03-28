@@ -66,16 +66,26 @@ local function applyToCharacter(player, level)
 	end
 end
 
+local function syncLeaderstat(player, walkSpeed)
+	local leaderstats = player:FindFirstChild("leaderstats")
+	local stat        = leaderstats and leaderstats:FindFirstChild("Speed")
+	if stat then
+		stat.Value = walkSpeed
+	end
+end
+
 local function setLevel(player, level)
 	level = math.max(0, math.floor(tonumber(level) or 0))
 	speedLevels[player.UserId] = level
+	local ws = walkSpeedForLevel(level)
 	applyToCharacter(player, level)
-	speedRemote:FireClient(player, level, walkSpeedForLevel(level))
+	speedRemote:FireClient(player, level, ws)
+	syncLeaderstat(player, ws)
 	-- persist immediately so changes survive if the server crashes
 	pcall(function()
 		speedStore:SetAsync("speed_" .. player.UserId, level)
 	end)
-	return walkSpeedForLevel(level)
+	return ws
 end
 
 local function getLevel(player)
@@ -97,6 +107,7 @@ local function loadLevel(player)
 	local level = speedLevels[player.UserId]
 	applyToCharacter(player, level)
 	speedRemote:FireClient(player, level, walkSpeedForLevel(level))
+	syncLeaderstat(player, walkSpeedForLevel(level))
 	warn("[SpeedSystem] Loaded level " .. level .. " for " .. player.Name)
 end
 
@@ -124,6 +135,7 @@ local function onCharacterAdded(player)
 		applyToCharacter(player, level)
 		-- re-fire so client UI refreshes after respawn
 		speedRemote:FireClient(player, level, walkSpeedForLevel(level))
+		syncLeaderstat(player, walkSpeedForLevel(level))
 	end)
 end
 
