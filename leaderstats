@@ -1,9 +1,37 @@
 -- ServerScriptService/LeaderStats.server.lua
 -- NOTE: Cash is fully managed by MoneyService.server.lua
 -- Speed is fully managed by SpeedSystem.server.lua (pushes WalkSpeed to leaderstats.Speed)
--- This script only manages Rebirths preservation across deaths
+-- This script manages Rebirths preservation across deaths and Cash display formatting
 
 local Players = game:GetService("Players")
+
+-- =====================================================
+-- FORMAT HELPER
+-- =====================================================
+-- Converts a raw number into a short suffix string:
+--   1 500      → "1.5K"
+--   2 000 000  → "2M"
+--   3 400 000 000 → "3.4B"
+--   etc.
+local SUFFIXES = { "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc" }
+
+local function formatNumber(n)
+	n = tonumber(n) or 0
+	local abs = math.abs(n)
+	for i = #SUFFIXES, 1, -1 do
+		local threshold = 10 ^ (i * 3)
+		if abs >= threshold then
+			local val = n / threshold
+			-- show one decimal only when it's not a whole number
+			if val == math.floor(val) then
+				return tostring(math.floor(val)) .. SUFFIXES[i]
+			else
+				return string.format("%.1f", val) .. SUFFIXES[i]
+			end
+		end
+	end
+	return tostring(math.floor(n))
+end
 
 Players.PlayerAdded:Connect(function(player)
 
@@ -14,7 +42,50 @@ Players.PlayerAdded:Connect(function(player)
 		return
 	end
 
-	-- Ensure Speed and Rebirths exist
+	-- =====================================================
+	-- CASH DISPLAY FORMATTING
+	-- =====================================================
+	-- MoneyService creates an IntValue "Cash" in leaderstats and updates it
+	-- via a local variable reference.  We move that IntValue into a hidden
+	-- _Data subfolder (Roblox leaderboard only reads DIRECT children of
+	-- leaderstats, so nested values are invisible to it) and replace it with
+	-- a StringValue "Cash" that shows the formatted number.
+	local function setupCashDisplay()
+		local rawCash = leaderstats:WaitForChild("Cash", 10)
+		if not rawCash then
+			warn("[LeaderStats] Cash not found for " .. player.Name)
+			return
+		end
+
+		-- Hidden storage folder — not shown on the leaderboard
+		local dataFolder = leaderstats:FindFirstChild("_Data")
+		if not dataFolder then
+			dataFolder        = Instance.new("Folder")
+			dataFolder.Name   = "_Data"
+			dataFolder.Parent = leaderstats
+		end
+
+		-- Move the raw IntValue out of the leaderboard's view
+		rawCash.Parent = dataFolder
+
+		-- Display StringValue shown on the leaderboard
+		local cashDisplay        = Instance.new("StringValue")
+		cashDisplay.Name         = "Cash"
+		cashDisplay.Value        = formatNumber(rawCash.Value)
+		cashDisplay.Parent       = leaderstats
+
+		-- Keep the display in sync whenever MoneyService updates the raw value
+		rawCash.Changed:Connect(function(newValue)
+			cashDisplay.Value = formatNumber(newValue)
+		end)
+	end
+
+	-- Run in a separate thread so it doesn't delay Rebirths setup
+	task.spawn(setupCashDisplay)
+
+	-- =====================================================
+	-- ENSURE DISPLAY SLOTS
+	-- =====================================================
 	local function ensureStat(name)
 		local stat = leaderstats:FindFirstChild(name)
 		if not stat then
@@ -29,8 +100,10 @@ Players.PlayerAdded:Connect(function(player)
 	ensureStat("Speed")   -- SpeedSystem writes the actual value; we just ensure the slot exists
 	local rebirths = ensureStat("Rebirths")
 
-	-- Snapshot Rebirths on Died, restore on CharacterAdded
+	-- =====================================================
+	-- REBIRTHS: snapshot on death, restore on respawn
 	-- Speed is NOT touched here — SpeedSystem owns it entirely
+	-- =====================================================
 	local savedRebirths = rebirths.Value
 
 	player.CharacterAdded:Connect(function(character)
