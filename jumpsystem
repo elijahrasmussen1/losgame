@@ -1,0 +1,174 @@
+-- JumpSystem.server.lua
+-- Place in ServerScriptService
+--
+-- Tracks a "jump level" per player.
+-- JumpPower  =  BASE_JUMP + (level * JUMP_PER_LEVEL)
+-- Level 0  →  JumpPower 50  (Roblox default)
+-- Level 1  →  JumpPower 60, level 2 → 70, etc.
+--
+-- Jump level is persisted in DataStore so it survives server restarts.
+--
+-- Exposes:
+--   ReplicatedStorage.JumpUpdateRemote  (RemoteEvent)
+--     → fires to the target client:  (level: number, jumpPower: number)
+--   ServerStorage.JumpAPIBindable       (BindableFunction)
+--     → server-to-server API used by AdminRemote
+
+local Players           = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerStorage     = game:GetService("ServerStorage")
+local DataStoreService  = game:GetService("DataStoreService")
+
+-- =====================================================
+-- CONFIG
+-- =====================================================
+local BASE_JUMP      = 50  -- JumpPower at level 0 (Roblox default)
+local JUMP_PER_LEVEL = 10  -- each +1 level adds this to JumpPower
+
+-- =====================================================
+-- DATASTORE
+-- =====================================================
+local jumpStore = DataStoreService:GetDataStore("PlayerJumpLevel_v1")
+
+-- =====================================================
+-- REMOTES / BINDABLES
+-- =====================================================
+local function getOrCreate(parent, name, class)
+	local obj = parent:FindFirstChild(name)
+	if not obj then
+		obj        = Instance.new(class)
+		obj.Name   = name
+		obj.Parent = parent
+	end
+	return obj
+end
+
+local jumpRemote = getOrCreate(ReplicatedStorage, "JumpUpdateRemote", "RemoteEvent")
+local jumpAPI    = getOrCreate(ServerStorage,     "JumpAPIBindable",  "BindableFunction")
+
+-- =====================================================
+-- STATE
+-- =====================================================
+local jumpLevels = {}  -- [userId] = level (integer ≥ 0)
+
+-- =====================================================
+-- HELPERS
+-- =====================================================
+local function jumpPowerForLevel(level)
+	return BASE_JUMP + level * JUMP_PER_LEVEL
+end
+
+local function applyToCharacter(player, level)
+	local char = player.Character
+	local hum  = char and char:FindFirstChildOfClass("Humanoid")
+	if hum then
+		hum.JumpPower = jumpPowerForLevel(level)
+	end
+end
+
+local function setLevel(player, level)
+	level = math.max(0, math.floor(tonumber(level) or 0))
+	jumpLevels[player.UserId] = level
+	local jp = jumpPowerForLevel(level)
+	applyToCharacter(player, level)
+	jumpRemote:FireClient(player, level, jp)
+	-- persist immediately so changes survive if the server crashes
+	pcall(function()
+		jumpStore:SetAsync("jump_" .. player.UserId, level)
+	end)
+	return jp
+end
+
+local function getLevel(player)
+	return jumpLevels[player.UserId] or 0
+end
+
+-- =====================================================
+-- DATASTORE LOAD / SAVE
+-- =====================================================
+local function loadLevel(player)
+	local success, data = pcall(function()
+		return jumpStore:GetAsync("jump_" .. player.UserId)
+	end)
+	if success and type(data) == "number" then
+		jumpLevels[player.UserId] = math.max(0, math.floor(data))
+	else
+		jumpLevels[player.UserId] = 0
+	end
+	local level = jumpLevels[player.UserId]
+	applyToCharacter(player, level)
+	jumpRemote:FireClient(player, level, jumpPowerForLevel(level))
+	warn("[JumpSystem] Loaded level " .. level .. " for " .. player.Name)
+end
+
+local function saveLevel(player)
+	local level = jumpLevels[player.UserId]
+	if level == nil then return end
+	local success, err = pcall(function()
+		jumpStore:SetAsync("jump_" .. player.UserId, level)
+	end)
+	if success then
+		warn("[JumpSystem] Saved level " .. level .. " for " .. player.Name)
+	else
+		warn("[JumpSystem] Save failed for " .. player.Name .. ": " .. tostring(err))
+	end
+	jumpLevels[player.UserId] = nil
+end
+
+-- =====================================================
+-- PLAYER LIFECYCLE
+-- =====================================================
+local function onCharacterAdded(player)
+	player.CharacterAdded:Connect(function()
+		task.wait()  -- let Humanoid load
+		local level = jumpLevels[player.UserId] or 0
+		applyToCharacter(player, level)
+		-- re-fire so client UI refreshes after respawn
+		jumpRemote:FireClient(player, level, jumpPowerForLevel(level))
+	end)
+end
+
+Players.PlayerAdded:Connect(function(player)
+	loadLevel(player)
+	onCharacterAdded(player)
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+	saveLevel(player)
+end)
+
+-- save all levels on server shutdown
+game:BindToClose(function()
+	for _, player in ipairs(Players:GetPlayers()) do
+		saveLevel(player)
+	end
+end)
+
+-- handle players already in the game when this script runs
+for _, player in ipairs(Players:GetPlayers()) do
+	if not jumpLevels[player.UserId] then
+		loadLevel(player)
+	end
+	onCharacterAdded(player)
+end
+
+-- =====================================================
+-- BINDABLE API (called by AdminRemote server script)
+-- =====================================================
+-- Supported actions:
+--   "SetLevel"     (player, level)      → set jump level, return jumpPower
+--   "GetLevel"     (player)             → return current level
+--   "SetJumpPower" (player, jumpPower)  → convert to nearest level, apply
+jumpAPI.OnInvoke = function(action, player, value)
+	if action == "SetLevel" then
+		return setLevel(player, value)
+	elseif action == "GetLevel" then
+		return getLevel(player)
+	elseif action == "SetJumpPower" then
+		local jp    = tonumber(value) or BASE_JUMP
+		local level = math.max(0, math.round((jp - BASE_JUMP) / JUMP_PER_LEVEL))
+		return setLevel(player, level)
+	end
+end
+
+warn("[JumpSystem] Ready — BASE_JUMP=" .. BASE_JUMP .. " JUMP_PER_LEVEL=" .. JUMP_PER_LEVEL)

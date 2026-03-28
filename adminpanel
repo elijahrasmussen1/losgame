@@ -203,6 +203,27 @@ if not isAdmin() then
 			end
 		end)
 	end
+
+	-- =====================================================
+	-- JUMP DISPLAY — runs for every player
+	-- Updates "Jump" TextLabel inside any "Abilities" Frame
+	-- when the server fires JumpUpdateRemote to this client
+	-- Level 0 = Roblox default jump, shows "0"
+	-- =====================================================
+	local jumpUpdateRemote = ReplicatedStorage:WaitForChild("JumpUpdateRemote", 30)
+	if jumpUpdateRemote then
+		jumpUpdateRemote.OnClientEvent:Connect(function(level, _jumpPower)
+			for _, gui in ipairs(playerGui:GetChildren()) do
+				local abilities = gui:FindFirstChild("Abilities", true)
+				if abilities then
+					local lbl = abilities:FindFirstChild("Jump", true)
+					if lbl and lbl:IsA("TextLabel") then
+						lbl.Text = tostring(level)
+					end
+				end
+			end
+		end)
+	end
 	return
 end
 if playerGui:FindFirstChild("AdminDashboard") then return end
@@ -227,6 +248,26 @@ if speedUpdateRemote then
 				local lbl = abilities:FindFirstChild("Speed", true)
 				if lbl and lbl:IsA("TextLabel") then
 					lbl.Text = tostring(math.floor(walkSpeed))
+				end
+			end
+		end
+	end)
+end
+
+-- =====================================================
+-- JUMP DISPLAY (admin players)
+-- Updates "Jump" TextLabel in "Abilities" frame when
+-- this admin's own jump level changes
+-- =====================================================
+local jumpUpdateRemote = ReplicatedStorage:WaitForChild("JumpUpdateRemote", 30)
+if jumpUpdateRemote then
+	jumpUpdateRemote.OnClientEvent:Connect(function(level, _jumpPower)
+		for _, gui in ipairs(playerGui:GetChildren()) do
+			local abilities = gui:FindFirstChild("Abilities", true)
+			if abilities then
+				local lbl = abilities:FindFirstChild("Jump", true)
+				if lbl and lbl:IsA("TextLabel") then
+					lbl.Text = tostring(level)
 				end
 			end
 		end

@@ -100,6 +100,32 @@ local function speedApiCall(action, player, value)
 end
 
 -- =====================================================
+-- JUMP API  (wait for JumpSystem to be ready)
+-- =====================================================
+local jumpAPIBindable = ServerStorage:WaitForChild("JumpAPIBindable", 30)
+if not jumpAPIBindable then
+	warn("[AdminRemote] JumpAPIBindable not found — jump commands will fall back to direct JumpPower")
+end
+
+local function jumpApiCall(action, player, value)
+	if not jumpAPIBindable then
+		-- fallback: set JumpPower directly without level tracking
+		local char = player.Character
+		local hum  = char and char:FindFirstChildOfClass("Humanoid")
+		if hum and action == "SetJumpPower" then hum.JumpPower = tonumber(value) or 50 end
+		return tonumber(value) or 50
+	end
+	local ok, result = pcall(function()
+		return jumpAPIBindable:Invoke(action, player, value)
+	end)
+	if not ok then
+		warn("[AdminRemote] JumpAPI call failed (" .. action .. "):", result)
+		return nil
+	end
+	return result
+end
+
+-- =====================================================
 -- ADMIN LIST
 -- =====================================================
 local adminUserIds = { 135740528, 8830142974, 541166467, 2741916860, 4178881808, 4099915549 }
@@ -595,9 +621,7 @@ adminRemote.OnServerEvent:Connect(function(sender, action, arg1, arg2, arg3)
 	end
 	if action == "set_jump" then
 		local t = findPlayer(tostring(arg1 or "")); if not t then return end
-		local char = t.Character; if not char then return end
-		local hum = char:FindFirstChildOfClass("Humanoid"); if not hum then return end
-		hum.JumpPower = tonumber(arg2) or 50; return
+		jumpApiCall("SetJumpPower", t, tonumber(arg2) or 50); return
 	end
 
 	-- ── FREEZE ────────────────────────────────────────────────────────────────
