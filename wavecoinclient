@@ -17,6 +17,33 @@ local getCoinsFunction = remotes:WaitForChild("GetCoins")
 local spendCoinsEvent  = remotes:WaitForChild("SpendCoins")
 
 -- =====================================================
+-- FORMAT HELPER  (mirrors the one in LeaderStats)
+-- =====================================================
+local SUFFIXES = {
+	"K",    "M",    "B",    "T",
+	"Qa",   "Qi",   "Sx",   "Sp",   "Oc",   "No",
+	"Dc",   "UDc",  "DDc",  "TDc",  "QaDc", "QiDc", "SxDc", "SpDc", "OcDc", "NoDc",
+	"Vg",   "UVg",  "DVg",  "TVg",  "QaVg", "QiVg", "SxVg", "SpVg", "OcVg", "NoVg",
+}
+
+local function formatNumber(n)
+	n = tonumber(n) or 0
+	local abs = math.abs(n)
+	for i = #SUFFIXES, 1, -1 do
+		local threshold = 10 ^ (i * 3)
+		if abs >= threshold then
+			local val = n / threshold
+			if val == math.floor(val) then
+				return tostring(math.floor(val)) .. SUFFIXES[i]
+			else
+				return string.format("%.1f", val) .. SUFFIXES[i]
+			end
+		end
+	end
+	return tostring(math.floor(n))
+end
+
+-- =====================================================
 -- FIND BOTH COIN LABELS
 -- 1. CoinsAmountMain  inside FloodCoins folder (HUD)
 -- 2. CoinsAmountGUI   inside WaveGUIMain       (shop panel)
@@ -53,7 +80,7 @@ end
 -- UPDATE BOTH LABELS AT ONCE
 -- =====================================================
 local function updateLabels(amount)
-	local text = tostring(amount)
+	local text = formatNumber(amount)
 	if coinLabelHud  then coinLabelHud.Text  = text end
 	if coinLabelShop then coinLabelShop.Text = text end
 end
