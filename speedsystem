@@ -6,6 +6,8 @@
 -- Level 0  →  WalkSpeed 16  (Roblox default)
 -- Level 1  →  WalkSpeed 18, level 2 → 20, etc.
 --
+-- Speed level is persisted in DataStore so it survives server restarts.
+--
 -- Exposes:
 --   ReplicatedStorage.SpeedUpdateRemote  (RemoteEvent)
 --     → fires to the target client:  (level: number, walkSpeed: number)
@@ -15,12 +17,18 @@
 local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage     = game:GetService("ServerStorage")
+local DataStoreService  = game:GetService("DataStoreService")
 
 -- =====================================================
 -- CONFIG
 -- =====================================================
 local BASE_SPEED      = 16  -- WalkSpeed at level 0
 local SPEED_PER_LEVEL = 2   -- each +1 level adds this to WalkSpeed
+
+-- =====================================================
+-- DATASTORE
+-- =====================================================
+local speedStore = DataStoreService:GetDataStore("PlayerSpeedLevel_v1")
 
 -- =====================================================
 -- REMOTES / BINDABLES
@@ -63,11 +71,47 @@ local function setLevel(player, level)
 	speedLevels[player.UserId] = level
 	applyToCharacter(player, level)
 	speedRemote:FireClient(player, level, walkSpeedForLevel(level))
+	-- persist immediately so changes survive if the server crashes
+	pcall(function()
+		speedStore:SetAsync("speed_" .. player.UserId, level)
+	end)
 	return walkSpeedForLevel(level)
 end
 
 local function getLevel(player)
 	return speedLevels[player.UserId] or 0
+end
+
+-- =====================================================
+-- DATASTORE LOAD / SAVE
+-- =====================================================
+local function loadLevel(player)
+	local success, data = pcall(function()
+		return speedStore:GetAsync("speed_" .. player.UserId)
+	end)
+	if success and type(data) == "number" then
+		speedLevels[player.UserId] = math.max(0, math.floor(data))
+	else
+		speedLevels[player.UserId] = 0
+	end
+	local level = speedLevels[player.UserId]
+	applyToCharacter(player, level)
+	speedRemote:FireClient(player, level, walkSpeedForLevel(level))
+	warn("[SpeedSystem] Loaded level " .. level .. " for " .. player.Name)
+end
+
+local function saveLevel(player)
+	local level = speedLevels[player.UserId]
+	if level == nil then return end
+	local success, err = pcall(function()
+		speedStore:SetAsync("speed_" .. player.UserId, level)
+	end)
+	if success then
+		warn("[SpeedSystem] Saved level " .. level .. " for " .. player.Name)
+	else
+		warn("[SpeedSystem] Save failed for " .. player.Name .. ": " .. tostring(err))
+	end
+	speedLevels[player.UserId] = nil
 end
 
 -- =====================================================
@@ -84,18 +128,25 @@ local function onCharacterAdded(player)
 end
 
 Players.PlayerAdded:Connect(function(player)
-	speedLevels[player.UserId] = 0
+	loadLevel(player)
 	onCharacterAdded(player)
 end)
 
 Players.PlayerRemoving:Connect(function(player)
-	speedLevels[player.UserId] = nil
+	saveLevel(player)
+end)
+
+-- save all levels on server shutdown
+game:BindToClose(function()
+	for _, player in ipairs(Players:GetPlayers()) do
+		saveLevel(player)
+	end
 end)
 
 -- handle players already in the game when this script runs
 for _, player in ipairs(Players:GetPlayers()) do
 	if not speedLevels[player.UserId] then
-		speedLevels[player.UserId] = 0
+		loadLevel(player)
 	end
 	onCharacterAdded(player)
 end
