@@ -1,0 +1,906 @@
+-- StarterPlayerScripts/BackpackClient.client.lua
+-- made by elijxhraz
+
+local Players           = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService  = game:GetService("UserInputService")
+local TweenService      = game:GetService("TweenService")
+local GuiService        = game:GetService("GuiService")
+local RunService        = game:GetService("RunService")
+local StarterGui        = game:GetService("StarterGui")
+local StarterPack       = game:GetService("StarterPack")
+local Debris            = game:GetService("Debris")
+
+local player    = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local hrp       = character:WaitForChild("HumanoidRootPart")
+
+local playerGui = player:WaitForChild("PlayerGui")
+StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
+
+local _, bottomInset = GuiService:GetGuiInset()
+local BOTTOM_SAFE = math.max(bottomInset.Y, 0) + 8
+
+local IS_MOBILE = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+
+local CFG = {
+	HOTBAR_SLOT_PX  = 58,
+	HOTBAR_GAP      = 5,
+	HOTBAR_CORNER   = 8,
+	HOTBAR_MAX      = 10,
+	BAG_SLOT_W      = 58,
+	BAG_SLOT_H      = 58,
+	BAG_SLOT_CORNER = 8,
+	BAG_GAP         = 5,
+	PANEL_W_SCALE   = 0.55,
+	PANEL_H         = 290,
+	PANEL_NUDGE     = 40,
+	BTN_PX          = 40,
+	BTN_LEFT        = 236,
+	BTN_TOP         = 36,
+	DRAG_THRESHOLD  = 8,
+	C_BG            = Color3.fromRGB(18,18,18),
+	C_SLOT          = Color3.fromRGB(28,28,28),
+	C_SLOT_EQ       = Color3.fromRGB(45,45,45),
+	C_BORDER        = Color3.fromRGB(55,55,55),
+	C_BORDER_EQ     = Color3.fromRGB(255,255,255),
+	C_NUM           = Color3.fromRGB(130,130,130),
+	C_NAME          = Color3.fromRGB(215,215,215),
+	C_LV            = Color3.fromRGB(255,205,55),
+	C_BTN           = Color3.fromRGB(20,20,20),
+	C_BTN_BORDER    = Color3.fromRGB(65,65,65),
+	C_BTN_OPEN      = Color3.fromRGB(140,140,140),
+	C_SEARCH_BG     = Color3.fromRGB(30,30,30),
+	C_PANEL_BORDER  = Color3.fromRGB(40,40,40),
+	TWEEN_IN        = 0.2,
+	TWEEN_OUT       = 0.15,
+}
+
+-- Mobile: slightly larger touch targets
+if IS_MOBILE then
+	CFG.HOTBAR_SLOT_PX  = 64
+	CFG.BAG_SLOT_W      = 64
+	CFG.BAG_SLOT_H      = 64
+	CFG.BTN_PX          = 46
+	CFG.DRAG_THRESHOLD  = 14
+end
+
+local HOTBAR_H     = CFG.HOTBAR_SLOT_PX + 20
+local PANEL_BOTTOM = (BOTTOM_SAFE + HOTBAR_H + 6) - CFG.PANEL_NUDGE
+local PANEL_SHOW   = UDim2.new(0.5, 0, 1, -PANEL_BOTTOM)
+local PANEL_HIDE   = UDim2.new(0.5, 0, 1, 50)
+
+local remotes           = ReplicatedStorage:WaitForChild("BackpackRemotes")
+local equipRemote       = remotes:WaitForChild("EquipItem")
+local unequipRemote     = remotes:WaitForChild("UnequipItem")
+local syncRemote        = remotes:WaitForChild("SyncBackpack")
+local brainrotCollected = remotes:WaitForChild("BrainrotCollected")
+local equipToolRemote   = remotes:WaitForChild("EquipTool")
+local unequipToolRemote = remotes:WaitForChild("UnequipTool")
+
+local modelsFolder = ReplicatedStorage:FindFirstChild("BrainrotModels")
+
+-- ══════════════════════════════════════════════════════════════════════
+-- HARDCODED ICON OVERRIDES
+-- ══════════════════════════════════════════════════════════════════════
+local ICON_OVERRIDES = {
+	["NoobiniCakenini"] = "rbxassetid://139682046905729",
+	["Allesina"]        = "rbxassetid://76770369547729",
+	["BackpackGlove"]   = "rbxassetid://126510061288640",
+}
+
+local OVERRIDE_ICON_SCALE  = 0.78
+local OVERRIDE_ICON_OFFSET = -6
+
+local TOOL_ITEMS = {
+	["BackpackGlove"] = true,
+}
+
+local HIDE_LEVEL = {
+	["BackpackGlove"] = true,
+}
+
+-- ══════════════════════════════════════════════════════════════════════
+-- MODEL TEMPLATE CACHE
+-- ══════════════════════════════════════════════════════════════════════
+local modelTemplateCache = {}
+
+local CARRIABLE = {
+	["NoobiniCakenini"] = true,
+	["Allesina"]        = true,
+}
+
+local function cacheModelTemplate(model)
+	if not model:IsA("Model") then return end
+	if model:GetAttribute("EquippedDisplay") then return end
+	local name = model.Name
+	if not CARRIABLE[name] then return end
+	local clone = model:Clone()
+	clone.Parent = nil
+	modelTemplateCache[name] = clone
+end
+
+for _, child in ipairs(workspace:GetChildren()) do
+	cacheModelTemplate(child)
+end
+workspace.ChildAdded:Connect(function(child)
+	if not child:GetAttribute("EquippedDisplay") then
+		cacheModelTemplate(child)
+	end
+end)
+
+local BrainrotsFolder = workspace:FindFirstChild("Brainrots")
+if BrainrotsFolder then
+	for _, child in ipairs(BrainrotsFolder:GetChildren()) do
+		cacheModelTemplate(child)
+	end
+	BrainrotsFolder.ChildAdded:Connect(cacheModelTemplate)
+	for _, child in ipairs(BrainrotsFolder:GetChildren()) do
+		if child:IsA("Folder") or child:IsA("Model") then
+			for _, grandchild in ipairs(child:GetChildren()) do
+				cacheModelTemplate(grandchild)
+			end
+			child.ChildAdded:Connect(cacheModelTemplate)
+		end
+	end
+	BrainrotsFolder.DescendantAdded:Connect(function(d)
+		if d:IsA("Model") then cacheModelTemplate(d) end
+	end)
+end
+
+local function findTemplateModel(modelName)
+	if not modelName or modelName == "" then return nil end
+	if modelTemplateCache[modelName] then return modelTemplateCache[modelName] end
+	if modelsFolder then
+		local t = modelsFolder:FindFirstChild(modelName) or modelsFolder:FindFirstChild(modelName, true)
+		if t then return t end
+	end
+	local t = ReplicatedStorage:FindFirstChild(modelName) or ReplicatedStorage:FindFirstChild(modelName, true)
+	if t then return t end
+	t = StarterPack:FindFirstChild(modelName)
+	if t then return t end
+	local backpack = player:FindFirstChild("Backpack")
+	if backpack then t = backpack:FindFirstChild(modelName); if t then return t end end
+	local char = player.Character
+	if char then t = char:FindFirstChild(modelName); if t then return t end end
+	local bf = workspace:FindFirstChild("Brainrots")
+	if bf then t = bf:FindFirstChild(modelName, true); if t then return t end end
+	t = workspace:FindFirstChild(modelName)
+	if t then return t end
+	return workspace:FindFirstChild(modelName, true)
+end
+
+local iconCache = {}
+
+local function resolveIcon(item)
+	local overrideName = (item.name and ICON_OVERRIDES[item.name])
+		or (item.modelName and ICON_OVERRIDES[item.modelName])
+	if overrideName then item.icon = overrideName; return overrideName end
+	if item.icon and item.icon ~= "" then return item.icon end
+	local modelName = item.modelName
+	if not modelName or modelName == "" then return "" end
+	if iconCache[modelName] ~= nil then
+		if iconCache[modelName] ~= "" then item.icon = iconCache[modelName] end
+		return iconCache[modelName]
+	end
+	local src = findTemplateModel(modelName)
+	if not src then iconCache[modelName] = ""; return "" end
+	local attr = src:GetAttribute("Icon") or src:GetAttribute("Thumbnail")
+	if attr and attr ~= "" then iconCache[modelName] = attr; item.icon = attr; return attr end
+	for _, name in ipairs({"Icon","Thumbnail","icon","thumbnail"}) do
+		local child = src:FindFirstChild(name, true)
+		if child then
+			local tex
+			if child:IsA("Decal") or child:IsA("Texture") then tex = child.Texture
+			elseif child:IsA("ImageLabel") or child:IsA("ImageButton") then tex = child.Image end
+			if tex and tex ~= "" then iconCache[modelName] = tex; item.icon = tex; return tex end
+		end
+	end
+	for _, d in ipairs(src:GetDescendants()) do
+		if (d:IsA("Decal") or d:IsA("Texture")) and d.Texture ~= "" then
+			iconCache[modelName] = d.Texture; item.icon = d.Texture; return d.Texture
+		end
+	end
+	iconCache[modelName] = ""; return ""
+end
+
+local function isToolItem(item)
+	if not item then return false end
+	return TOOL_ITEMS[item.name] or TOOL_ITEMS[item.modelName] or false
+end
+
+local function shouldHideLevel(item)
+	if not item then return false end
+	return HIDE_LEVEL[item.name] or HIDE_LEVEL[item.modelName] or false
+end
+
+-- ══════════════════════════════════════════════════════════════════════
+-- CROSS-PLATFORM INPUT HELPER
+-- ══════════════════════════════════════════════════════════════════════
+local function getPointerPosition()
+	-- Works for both mouse and touch
+	local success, pos = pcall(function()
+		return UserInputService:GetMouseLocation()
+	end)
+	if success then return pos end
+	return Vector2.new(0, 0)
+end
+
+-- ══════════════════════════════════════════════════════════════════════
+-- STATE
+-- ══════════════════════════════════════════════════════════════════════
+local State = {
+	equippedSlot = nil,
+	panelOpen    = false,
+	hotbar       = {},
+	bag          = {},
+}
+
+local function itemKey(item)
+	return tostring(item.id or (tostring(item.name) .. "_" .. tostring(item.level or 1)))
+end
+
+local function buildItemCounts()
+	local counts = {}
+	for i = 1, CFG.HOTBAR_MAX do
+		if State.hotbar[i] then
+			local k = itemKey(State.hotbar[i])
+			counts[k] = (counts[k] or 0) + 1
+		end
+	end
+	for _, item in ipairs(State.bag) do
+		local k = itemKey(item)
+		counts[k] = (counts[k] or 0) + 1
+	end
+	return counts
+end
+
+local function insertNewItem(item)
+	for i = 1, CFG.HOTBAR_MAX do
+		if not State.hotbar[i] then State.hotbar[i] = item; return end
+	end
+	table.insert(State.bag, item)
+end
+
+local equippedModel  = nil
+local equipConn      = nil
+local equippedHandle = nil
+local equippedIsTool = false
+
+local function detachEquipped()
+	if equipConn then equipConn:Disconnect(); equipConn = nil end
+	if equippedModel and equippedModel.Parent then equippedModel:Destroy() end
+	if equippedHandle and equippedHandle.Parent then equippedHandle:Destroy() end
+	if equippedIsTool then unequipToolRemote:FireServer() end
+	equippedModel = nil; equippedHandle = nil; equippedIsTool = false
+end
+
+local function attachEquippedTool(item)
+	detachEquipped()
+	if not item then return end
+	local toolName = item.name or item.modelName or "BackpackGlove"
+	equipToolRemote:FireServer(toolName)
+	equippedIsTool = true
+end
+
+local function attachEquipped(item)
+	detachEquipped()
+	if not item then return end
+	if isToolItem(item) then attachEquippedTool(item); return end
+
+	local src = findTemplateModel(item.modelName)
+	if not src then warn("[BackpackClient] model not found:", item.modelName); return end
+
+	local clone = src:Clone()
+	clone:SetAttribute("EquippedDisplay", true)
+	clone.Name = "__Equipped_" .. item.modelName
+
+	for _, d in ipairs(clone:GetDescendants()) do
+		if d:IsA("SurfaceGui") or d:IsA("ScreenGui") or d:IsA("ProximityPrompt")
+			or d:IsA("ClickDetector") or d:IsA("Script") or d:IsA("LocalScript") then
+			d:Destroy()
+		end
+	end
+	for _, d in ipairs(clone:GetDescendants()) do
+		if d:IsA("BillboardGui") and d.Name ~= "StatsGui" then d:Destroy() end
+	end
+
+	local allParts = {}
+	for _, p in ipairs(clone:GetDescendants()) do
+		if p:IsA("BasePart") then table.insert(allParts, p) end
+	end
+	if #allParts == 0 then clone:Destroy(); return end
+
+	local targetCF = hrp.CFrame * CFrame.new(0, -1, -3.5)
+
+	local handle = Instance.new("Part")
+	handle.Name = "__EquipHandle"; handle.Size = Vector3.new(0.1,0.1,0.1)
+	handle.Transparency = 1; handle.CanCollide = false; handle.CastShadow = false
+	handle.Anchored = true; handle.Massless = true; handle.CFrame = targetCF
+	handle.Parent = workspace
+
+	local root = clone.PrimaryPart
+		or clone:FindFirstChild("Root", true)
+		or clone:FindFirstChildWhichIsA("MeshPart", true)
+		or clone:FindFirstChildWhichIsA("BasePart", true)
+
+	for _, p in ipairs(allParts) do
+		p.Anchored = false; p.CanCollide = false; p.CastShadow = false; p.Massless = true
+	end
+	clone.Parent = workspace
+	if root then
+		if not clone.PrimaryPart then clone.PrimaryPart = root end
+		clone:PivotTo(targetCF)
+	else clone:MoveTo(targetCF.Position) end
+
+	for _, p in ipairs(allParts) do
+		local w = Instance.new("WeldConstraint"); w.Part0 = handle; w.Part1 = p; w.Parent = handle
+	end
+
+	local adornPart = root or allParts[1]
+	for _, d in ipairs(clone:GetDescendants()) do
+		if d:IsA("BillboardGui") and d.Name == "StatsGui" then d.Adornee = adornPart; d.Enabled = true end
+	end
+
+	equippedModel = clone; equippedHandle = handle
+	equipConn = RunService.Heartbeat:Connect(function()
+		if not hrp or not hrp.Parent then detachEquipped(); return end
+		if not equippedHandle or not equippedHandle.Parent then equipConn:Disconnect(); equipConn = nil; return end
+		equippedHandle.CFrame = hrp.CFrame * CFrame.new(0, -1, -3.5)
+	end)
+end
+
+player.CharacterAdded:Connect(function(c)
+	character = c; hrp = c:WaitForChild("HumanoidRootPart")
+	equippedModel = nil; equippedHandle = nil; equippedIsTool = false
+	if equipConn then equipConn:Disconnect(); equipConn = nil end
+	if State.equippedSlot and State.hotbar[State.equippedSlot] then
+		task.wait(0.1); attachEquipped(State.hotbar[State.equippedSlot])
+	end
+end)
+
+-- ══════════════════════════════════════════════════════════════════════
+-- DRAG STATE
+-- ══════════════════════════════════════════════════════════════════════
+local drag = {
+	pending = false, active = false,
+	item = nil, srcHotbar = nil, srcBag = nil,
+	ghost = nil, startPos = nil, touchId = nil,
+}
+
+local function newGui(name, order)
+	local g = Instance.new("ScreenGui")
+	g.Name = name; g.ResetOnSpawn = false; g.IgnoreGuiInset = true
+	g.DisplayOrder = order or 1; g.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	g.Parent = playerGui; return g
+end
+local toggleGui = newGui("BackpackToggleGui", 1)
+local mainGui   = newGui("BackpackGui", 2)
+local dragGui   = newGui("BackpackDragGui", 99)
+
+local function mkCorner(p, r)
+	local c = Instance.new("UICorner"); c.CornerRadius = r or UDim.new(0,CFG.HOTBAR_CORNER); c.Parent = p
+end
+local function mkStroke(p, col, th)
+	local s = Instance.new("UIStroke"); s.Color = col or CFG.C_BORDER; s.Thickness = th or 1.5; s.Parent = p; return s
+end
+local function mkPad(p, px)
+	local u = UDim.new(0,px); local d = Instance.new("UIPadding")
+	d.PaddingTop=u; d.PaddingBottom=u; d.PaddingLeft=u; d.PaddingRight=u; d.Parent = p
+end
+
+local panelReady = false
+
+local function getViewportSize()
+	return workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1280,720)
+end
+
+local function inPanelZone(mp)
+	if not State.panelOpen then return false end
+	local vp = getViewportSize()
+	local panelW = vp.X * CFG.PANEL_W_SCALE
+	local cx = vp.X * 0.5
+	local bottom = vp.Y - PANEL_BOTTOM
+	local left = cx - panelW * 0.5
+	local top = bottom - CFG.PANEL_H
+	return mp.X >= left and mp.X <= left + panelW and mp.Y >= top and mp.Y <= top + CFG.PANEL_H
+end
+
+-- ══════════════════════════════════════════════════════════════════════
+-- UI CONSTRUCTION
+-- ══════════════════════════════════════════════════════════════════════
+local UI = {}
+
+UI.toggleBtn = Instance.new("ImageButton")
+UI.toggleBtn.Name = "ToggleBtn"; UI.toggleBtn.AnchorPoint = Vector2.new(0.5,0.5)
+UI.toggleBtn.Position = UDim2.new(0,CFG.BTN_LEFT,0,CFG.BTN_TOP)
+UI.toggleBtn.Size = UDim2.new(0,CFG.BTN_PX,0,CFG.BTN_PX)
+UI.toggleBtn.BackgroundColor3 = CFG.C_BTN; UI.toggleBtn.BorderSizePixel = 0
+UI.toggleBtn.Image = ""; UI.toggleBtn.AutoButtonColor = false
+UI.toggleBtn.ZIndex = 20; UI.toggleBtn.Parent = toggleGui
+mkCorner(UI.toggleBtn, UDim.new(1,0))
+UI.toggleStroke = mkStroke(UI.toggleBtn, CFG.C_BTN_BORDER, 1.5)
+local btnIco = Instance.new("ImageLabel")
+btnIco.AnchorPoint = Vector2.new(0.5,0.5); btnIco.Position = UDim2.new(0.5,0,0.5,0)
+btnIco.Size = UDim2.new(0,60,0,60); btnIco.BackgroundTransparency = 1
+btnIco.Image = "rbxassetid://115577173602604"; btnIco.ImageColor3 = Color3.fromRGB(235,235,235)
+btnIco.ScaleType = Enum.ScaleType.Fit; btnIco.ZIndex = 21; btnIco.Parent = UI.toggleBtn
+
+UI.hotbarWrap = Instance.new("Frame")
+UI.hotbarWrap.Name = "HotbarWrap"; UI.hotbarWrap.AnchorPoint = Vector2.new(0.5,1)
+UI.hotbarWrap.Position = UDim2.new(0.5,0,1,-(BOTTOM_SAFE+2))
+UI.hotbarWrap.Size = UDim2.new(0,CFG.HOTBAR_SLOT_PX,0,HOTBAR_H)
+UI.hotbarWrap.BackgroundTransparency = 1; UI.hotbarWrap.Parent = mainGui
+
+UI.hotbarRow = Instance.new("Frame")
+UI.hotbarRow.Name = "HotbarRow"; UI.hotbarRow.AnchorPoint = Vector2.new(0.5,0)
+UI.hotbarRow.Position = UDim2.new(0.5,0,0,0)
+UI.hotbarRow.Size = UDim2.new(0,CFG.HOTBAR_SLOT_PX,0,CFG.HOTBAR_SLOT_PX)
+UI.hotbarRow.BackgroundTransparency = 1; UI.hotbarRow.Parent = UI.hotbarWrap
+local hbList = Instance.new("UIListLayout")
+hbList.FillDirection = Enum.FillDirection.Horizontal
+hbList.HorizontalAlignment = Enum.HorizontalAlignment.Center
+hbList.VerticalAlignment = Enum.VerticalAlignment.Center
+hbList.Padding = UDim.new(0,CFG.HOTBAR_GAP)
+hbList.SortOrder = Enum.SortOrder.LayoutOrder; hbList.Parent = UI.hotbarRow
+
+UI.numRow = Instance.new("Frame")
+UI.numRow.Name = "NumRow"; UI.numRow.AnchorPoint = Vector2.new(0.5,0)
+UI.numRow.Position = UDim2.new(0.5,0,0,CFG.HOTBAR_SLOT_PX+3)
+UI.numRow.Size = UDim2.new(0,CFG.HOTBAR_SLOT_PX,0,14)
+UI.numRow.BackgroundTransparency = 1; UI.numRow.Parent = UI.hotbarWrap
+local numList = Instance.new("UIListLayout")
+numList.FillDirection = Enum.FillDirection.Horizontal
+numList.HorizontalAlignment = Enum.HorizontalAlignment.Center
+numList.Padding = UDim.new(0,CFG.HOTBAR_GAP)
+numList.SortOrder = Enum.SortOrder.LayoutOrder; numList.Parent = UI.numRow
+
+UI.panel = Instance.new("Frame")
+UI.panel.Name = "Panel"; UI.panel.AnchorPoint = Vector2.new(0.5,1)
+UI.panel.Position = PANEL_HIDE; UI.panel.Size = UDim2.new(CFG.PANEL_W_SCALE,0,0,CFG.PANEL_H)
+UI.panel.BackgroundColor3 = CFG.C_BG; UI.panel.BackgroundTransparency = 0.05
+UI.panel.BorderSizePixel = 0; UI.panel.Visible = false; UI.panel.Parent = mainGui
+mkCorner(UI.panel, UDim.new(0,10)); mkStroke(UI.panel, CFG.C_PANEL_BORDER, 1); mkPad(UI.panel, 8)
+
+UI.panelTitle = Instance.new("TextLabel")
+UI.panelTitle.Size = UDim2.new(0.6,0,0,22); UI.panelTitle.BackgroundTransparency = 1
+UI.panelTitle.Text = "Inventory"; UI.panelTitle.TextColor3 = Color3.fromRGB(200,200,200)
+UI.panelTitle.Font = Enum.Font.GothamBold; UI.panelTitle.TextSize = 14
+UI.panelTitle.TextXAlignment = Enum.TextXAlignment.Left; UI.panelTitle.Parent = UI.panel
+
+UI.search = Instance.new("TextBox")
+UI.search.AnchorPoint = Vector2.new(1,0); UI.search.Position = UDim2.new(1,0,0,0)
+UI.search.Size = UDim2.new(0.3,0,0,22); UI.search.BackgroundColor3 = CFG.C_SEARCH_BG
+UI.search.BorderSizePixel = 0; UI.search.PlaceholderText = "Search..."
+UI.search.PlaceholderColor3 = Color3.fromRGB(80,80,80)
+UI.search.TextColor3 = Color3.fromRGB(210,210,210)
+UI.search.Font = Enum.Font.GothamSemibold; UI.search.TextSize = 11
+UI.search.Text = ""; UI.search.ClearTextOnFocus = false; UI.search.Parent = UI.panel
+mkCorner(UI.search, UDim.new(0,5)); mkStroke(UI.search, Color3.fromRGB(45,45,45), 1)
+
+UI.bagScroll = Instance.new("ScrollingFrame")
+UI.bagScroll.Name = "BagScroll"; UI.bagScroll.AnchorPoint = Vector2.new(0,1)
+UI.bagScroll.Position = UDim2.new(0,0,1,0); UI.bagScroll.Size = UDim2.new(1,0,1,-32)
+UI.bagScroll.BackgroundTransparency = 1; UI.bagScroll.BorderSizePixel = 0
+UI.bagScroll.ScrollBarThickness = 3; UI.bagScroll.ScrollBarImageColor3 = Color3.fromRGB(60,60,60)
+UI.bagScroll.CanvasSize = UDim2.new(0,0,0,0); UI.bagScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+UI.bagScroll.Parent = UI.panel
+local bagGridLayout = Instance.new("UIGridLayout")
+bagGridLayout.CellSize = UDim2.new(0,CFG.BAG_SLOT_W,0,CFG.BAG_SLOT_H)
+bagGridLayout.CellPadding = UDim2.new(0,CFG.BAG_GAP,0,CFG.BAG_GAP)
+bagGridLayout.SortOrder = Enum.SortOrder.LayoutOrder; bagGridLayout.Parent = UI.bagScroll
+
+local hotbarFrames = {}
+local bagFrames    = {}
+
+local function hitTestFrames(frames, mp)
+	for idx, f in pairs(frames) do
+		if f and f.Visible then
+			local a = f.AbsolutePosition; local s = f.AbsoluteSize
+			if mp.X >= a.X and mp.X <= a.X+s.X and mp.Y >= a.Y and mp.Y <= a.Y+s.Y then return idx end
+		end
+	end
+	return nil
+end
+
+local function makeSlotCard(parent, item, slotW, slotH, cornerR, zBase, isEq)
+	zBase = zBase or 1
+	local f = Instance.new("Frame")
+	f.Size = UDim2.new(0,slotW,0,slotH)
+	f.BackgroundColor3 = isEq and CFG.C_SLOT_EQ or CFG.C_SLOT
+	f.BorderSizePixel = 0; f.Parent = parent
+	mkCorner(f, UDim.new(0,cornerR))
+	mkStroke(f, isEq and CFG.C_BORDER_EQ or CFG.C_BORDER, isEq and 2.5 or 1.5)
+
+	local icon = resolveIcon(item)
+	local hasOverride = (item.name and ICON_OVERRIDES[item.name] ~= nil)
+		or (item.modelName and ICON_OVERRIDES[item.modelName] ~= nil)
+
+	local ico = Instance.new("ImageLabel")
+	ico.AnchorPoint = Vector2.new(0.5,0.5); ico.BackgroundTransparency = 1
+	ico.Image = icon; ico.ScaleType = Enum.ScaleType.Fit; ico.ZIndex = zBase+1; ico.Parent = f
+	if hasOverride then
+		local sz = slotW * OVERRIDE_ICON_SCALE
+		ico.Position = UDim2.new(0.5,0,0.5,OVERRIDE_ICON_OFFSET)
+		ico.Size = UDim2.new(0,sz,0,sz)
+	else
+		local icoSize = slotW * 0.62
+		ico.Position = UDim2.new(0.5,0,0.44,0); ico.Size = UDim2.new(0,icoSize,0,icoSize)
+	end
+
+	local nameLbl = Instance.new("TextLabel")
+	nameLbl.AnchorPoint = Vector2.new(0.5,1); nameLbl.Position = UDim2.new(0.5,0,1,-14)
+	nameLbl.Size = UDim2.new(1,-4,0,13); nameLbl.BackgroundTransparency = 1
+	nameLbl.Text = item.name or ""; nameLbl.TextColor3 = CFG.C_NAME
+	nameLbl.Font = Enum.Font.Gotham; nameLbl.TextSize = 8
+	nameLbl.TextTruncate = Enum.TextTruncate.AtEnd
+	nameLbl.TextXAlignment = Enum.TextXAlignment.Center
+	nameLbl.ZIndex = zBase+2; nameLbl.Parent = f
+
+	local lvLbl = Instance.new("TextLabel")
+	lvLbl.AnchorPoint = Vector2.new(0.5,1); lvLbl.Position = UDim2.new(0.5,0,1,-2)
+	lvLbl.Size = UDim2.new(1,-4,0,11); lvLbl.BackgroundTransparency = 1
+	lvLbl.Text = "Lv."..(item.level or 1); lvLbl.TextColor3 = CFG.C_LV
+	lvLbl.Font = Enum.Font.GothamBold; lvLbl.TextSize = 8
+	lvLbl.TextXAlignment = Enum.TextXAlignment.Center
+	lvLbl.ZIndex = zBase+2; lvLbl.Parent = f
+	lvLbl.Visible = not shouldHideLevel(item)
+
+	-- TextButton for click/tap — works on all platforms
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(1,0,1,0); btn.BackgroundTransparency = 1
+	btn.Text = ""; btn.ZIndex = zBase+4; btn.Parent = f
+	-- Make button Active so it captures touch on mobile
+	btn.Active = true
+	return f, btn
+end
+
+local function makeGhost(item)
+	local g = Instance.new("Frame")
+	g.Size = UDim2.new(0,CFG.BAG_SLOT_W,0,CFG.BAG_SLOT_H)
+	g.BackgroundColor3 = CFG.C_SLOT; g.BorderSizePixel = 0
+	g.ZIndex = 100; g.AnchorPoint = Vector2.new(0.5,0.5); g.Parent = dragGui
+	mkCorner(g, UDim.new(0,CFG.BAG_SLOT_CORNER)); mkStroke(g, CFG.C_BORDER_EQ, 2)
+
+	local icon = resolveIcon(item)
+	local hasOverride = (item.name and ICON_OVERRIDES[item.name] ~= nil)
+		or (item.modelName and ICON_OVERRIDES[item.modelName] ~= nil)
+	local ico = Instance.new("ImageLabel")
+	ico.AnchorPoint = Vector2.new(0.5,0.5); ico.BackgroundTransparency = 1
+	ico.Image = icon; ico.ScaleType = Enum.ScaleType.Fit; ico.ZIndex = 101; ico.Parent = g
+	if hasOverride then
+		local sz = CFG.BAG_SLOT_W * OVERRIDE_ICON_SCALE
+		ico.Position = UDim2.new(0.5,0,0.5,OVERRIDE_ICON_OFFSET); ico.Size = UDim2.new(0,sz,0,sz)
+	else
+		local icoSize = CFG.BAG_SLOT_W * 0.62
+		ico.Position = UDim2.new(0.5,0,0.44,0); ico.Size = UDim2.new(0,icoSize,0,icoSize)
+	end
+
+	local nl = Instance.new("TextLabel")
+	nl.AnchorPoint = Vector2.new(0.5,1); nl.Position = UDim2.new(0.5,0,1,-14)
+	nl.Size = UDim2.new(1,-4,0,13); nl.BackgroundTransparency = 1
+	nl.Text = item.name or ""; nl.TextColor3 = CFG.C_NAME
+	nl.Font = Enum.Font.Gotham; nl.TextSize = 8
+	nl.TextTruncate = Enum.TextTruncate.AtEnd; nl.TextXAlignment = Enum.TextXAlignment.Center
+	nl.ZIndex = 102; nl.Parent = g
+
+	local lv = Instance.new("TextLabel")
+	lv.AnchorPoint = Vector2.new(0.5,1); lv.Position = UDim2.new(0.5,0,1,-2)
+	lv.Size = UDim2.new(1,-4,0,11); lv.BackgroundTransparency = 1
+	lv.Text = "Lv."..(item.level or 1); lv.TextColor3 = CFG.C_LV
+	lv.Font = Enum.Font.GothamBold; lv.TextSize = 8
+	lv.TextXAlignment = Enum.TextXAlignment.Center; lv.ZIndex = 102; lv.Parent = g
+	lv.Visible = not shouldHideLevel(item)
+	return g
+end
+
+local function beginPendingDrag(item, hotbarIdx, bagIdx)
+	drag.pending = true; drag.active = false
+	drag.item = item; drag.srcHotbar = hotbarIdx; drag.srcBag = bagIdx
+	drag.startPos = getPointerPosition()
+end
+
+local function clearDrag()
+	if drag.ghost then drag.ghost:Destroy(); drag.ghost = nil end
+	drag.active = false; drag.pending = false
+	drag.item = nil; drag.srcHotbar = nil; drag.srcBag = nil
+	drag.startPos = nil; drag.touchId = nil
+end
+
+-- ══════════════════════════════════════════════════════════════════════
+-- EQUIP/UNEQUIP LOGIC (shared by click, tap, and keyboard)
+-- ══════════════════════════════════════════════════════════════════════
+local rebuildHotbar, rebuildBag, rebuildUI
+
+local function handleSlotTap(hIdx, itm)
+	if State.equippedSlot == hIdx then
+		State.equippedSlot = nil; unequipRemote:FireServer(); detachEquipped()
+	else
+		State.equippedSlot = hIdx; equipRemote:FireServer(hIdx); attachEquipped(itm)
+	end
+	rebuildHotbar()
+	if State.panelOpen then rebuildBag() end
+end
+
+local function handleDrop(mp)
+	local fromHotbar = drag.srcHotbar ~= nil
+	local fromBag    = drag.srcBag ~= nil
+	local srcH = drag.srcHotbar; local srcB = drag.srcBag
+	local itm = drag.item
+	local droppedInPanel = inPanelZone(mp)
+
+	if fromHotbar then
+		if droppedInPanel then
+			local bHit = panelReady and hitTestFrames(bagFrames, mp) or nil
+			if bHit then
+				State.bag[bHit], State.hotbar[srcH] = itm, State.bag[bHit]
+			else
+				State.hotbar[srcH] = nil; table.insert(State.bag, itm)
+			end
+			if State.equippedSlot == srcH then
+				State.equippedSlot = nil; unequipRemote:FireServer(); detachEquipped()
+			end
+		else
+			local hHit = hitTestFrames(hotbarFrames, mp)
+			if hHit and hHit ~= srcH then
+				State.hotbar[hHit], State.hotbar[srcH] = State.hotbar[srcH], State.hotbar[hHit]
+				if State.equippedSlot == srcH then State.equippedSlot = hHit
+				elseif State.equippedSlot == hHit then State.equippedSlot = srcH end
+			end
+		end
+	elseif fromBag then
+		if not droppedInPanel then
+			local hHit = hitTestFrames(hotbarFrames, mp)
+			if hHit then
+				local displaced = State.hotbar[hHit]
+				State.hotbar[hHit] = itm; table.remove(State.bag, srcB)
+				if displaced then
+					table.insert(State.bag, displaced)
+					if State.equippedSlot == hHit then
+						State.equippedSlot = nil; unequipRemote:FireServer(); detachEquipped()
+					end
+				end
+			else
+				for i = 1, CFG.HOTBAR_MAX do
+					if not State.hotbar[i] then
+						State.hotbar[i] = itm; table.remove(State.bag, srcB); break
+					end
+				end
+			end
+		else
+			local bHit = hitTestFrames(bagFrames, mp)
+			if bHit and bHit ~= srcB then
+				State.bag[bHit], State.bag[srcB] = State.bag[srcB], State.bag[bHit]
+			end
+		end
+	end
+	clearDrag(); rebuildUI()
+end
+
+rebuildHotbar = function()
+	for _, f in pairs(hotbarFrames) do if f then f:Destroy() end end
+	hotbarFrames = {}
+	for _, c in ipairs(UI.numRow:GetChildren()) do if c:IsA("TextLabel") then c:Destroy() end end
+	local count = 0
+	for i = 1, CFG.HOTBAR_MAX do if State.hotbar[i] then count = count + 1 end end
+	local totalW = math.max(CFG.HOTBAR_SLOT_PX,
+		count * (CFG.HOTBAR_SLOT_PX + CFG.HOTBAR_GAP) - (count > 0 and CFG.HOTBAR_GAP or 0))
+	UI.hotbarWrap.Size = UDim2.new(0,totalW,0,HOTBAR_H)
+	UI.hotbarRow.Size  = UDim2.new(0,totalW,0,CFG.HOTBAR_SLOT_PX)
+	UI.numRow.Size     = UDim2.new(0,totalW,0,14)
+	for i = 1, CFG.HOTBAR_MAX do
+		local item = State.hotbar[i]
+		if not item then continue end
+		local isEq = State.equippedSlot == i
+		local f, btn = makeSlotCard(UI.hotbarRow, item,
+			CFG.HOTBAR_SLOT_PX, CFG.HOTBAR_SLOT_PX, CFG.HOTBAR_CORNER, 1, isEq)
+		f.Name = "HSlot"..i; f.LayoutOrder = i; hotbarFrames[i] = f
+
+		local nl = Instance.new("TextLabel")
+		nl.Size = UDim2.new(0,CFG.HOTBAR_SLOT_PX,0,14); nl.BackgroundTransparency = 1
+		nl.Text = tostring(i == 10 and 0 or i); nl.TextColor3 = CFG.C_NUM
+		nl.Font = Enum.Font.GothamBold; nl.TextSize = 10
+		nl.TextXAlignment = Enum.TextXAlignment.Center
+		nl.LayoutOrder = i; nl.Parent = UI.numRow
+
+		-- Mouse down (desktop drag start)
+		btn.MouseButton1Down:Connect(function()
+			beginPendingDrag(item, i, nil)
+		end)
+
+		-- Touch: tap to equip, hold+drag to rearrange
+		btn.TouchLongPress:Connect(function()
+			beginPendingDrag(item, i, nil)
+		end)
+		btn.TouchTap:Connect(function()
+			if not drag.active then
+				handleSlotTap(i, item)
+			end
+		end)
+	end
+end
+
+rebuildBag = function()
+	for _, c in ipairs(UI.bagScroll:GetChildren()) do if c:IsA("Frame") then c:Destroy() end end
+	bagFrames = {}
+	for i, item in ipairs(State.bag) do
+		local f, btn = makeSlotCard(UI.bagScroll, item,
+			CFG.BAG_SLOT_W, CFG.BAG_SLOT_H, CFG.BAG_SLOT_CORNER, 10, false)
+		f.Name = "BSlot"..i; f.LayoutOrder = i
+		f:SetAttribute("BagIndex", i); bagFrames[i] = f
+		btn.MouseButton1Down:Connect(function()
+			beginPendingDrag(item, nil, i)
+		end)
+		btn.TouchLongPress:Connect(function()
+			beginPendingDrag(item, nil, i)
+		end)
+	end
+end
+
+rebuildUI = function()
+	rebuildHotbar()
+	if State.panelOpen then rebuildBag() end
+end
+
+-- ══════════════════════════════════════════════════════════════════════
+-- INPUT HANDLING: mouse + touch unified
+-- ══════════════════════════════════════════════════════════════════════
+UserInputService.InputChanged:Connect(function(inp)
+	local isMove = inp.UserInputType == Enum.UserInputType.MouseMovement
+		or inp.UserInputType == Enum.UserInputType.Touch
+	if not isMove then return end
+
+	local mp = Vector2.new(inp.Position.X, inp.Position.Y)
+
+	if drag.active and drag.ghost then
+		drag.ghost.Position = UDim2.fromOffset(mp.X, mp.Y)
+		return
+	end
+	if drag.pending and drag.startPos then
+		local dx = mp.X - drag.startPos.X
+		local dy = mp.Y - drag.startPos.Y
+		if math.abs(dx) > CFG.DRAG_THRESHOLD or math.abs(dy) > CFG.DRAG_THRESHOLD then
+			drag.active = true; drag.pending = false
+			drag.ghost = makeGhost(drag.item)
+			drag.ghost.Position = UDim2.fromOffset(mp.X, mp.Y)
+		end
+	end
+end)
+
+UserInputService.InputEnded:Connect(function(inp)
+	local isRelease = inp.UserInputType == Enum.UserInputType.MouseButton1
+		or inp.UserInputType == Enum.UserInputType.Touch
+	if not isRelease then return end
+
+	if drag.pending then
+		local hIdx = drag.srcHotbar
+		local itm  = drag.item
+		clearDrag()
+		-- Only handle equip for mouse — touch uses TouchTap
+		if hIdx and itm and inp.UserInputType == Enum.UserInputType.MouseButton1 then
+			handleSlotTap(hIdx, itm)
+		end
+		return
+	end
+
+	if not drag.active then return end
+
+	local mp = Vector2.new(inp.Position.X, inp.Position.Y)
+	handleDrop(mp)
+end)
+
+-- ══════════════════════════════════════════════════════════════════════
+-- SYNC
+-- ══════════════════════════════════════════════════════════════════════
+syncRemote.OnClientEvent:Connect(function(data)
+	local isFirstSync = (next(State.hotbar) == nil) and (#State.bag == 0)
+	if isFirstSync then
+		State.equippedSlot = data.equipped; State.hotbar = {}; State.bag = {}
+		if data.hotbar then
+			for i = 1, CFG.HOTBAR_MAX do
+				if data.hotbar[i] then
+					local item = data.hotbar[i]
+					if not item.level then item.level = 1 end
+					resolveIcon(item); State.hotbar[i] = item
+				end
+			end
+		end
+		if data.bag then
+			for _, item in ipairs(data.bag) do
+				if not item.level then item.level = 1 end
+				resolveIcon(item); table.insert(State.bag, item)
+			end
+		end
+	else
+		local serverCounts, serverItemsByKey = {}, {}
+		if data.hotbar then
+			for i = 1, CFG.HOTBAR_MAX do
+				if data.hotbar[i] then
+					local item = data.hotbar[i]
+					if not item.level then item.level = 1 end
+					resolveIcon(item)
+					local k = itemKey(item)
+					serverCounts[k] = (serverCounts[k] or 0) + 1; serverItemsByKey[k] = item
+				end
+			end
+		end
+		if data.bag then
+			for _, item in ipairs(data.bag) do
+				if not item.level then item.level = 1 end
+				resolveIcon(item)
+				local k = itemKey(item)
+				serverCounts[k] = (serverCounts[k] or 0) + 1; serverItemsByKey[k] = item
+			end
+		end
+		local clientCounts = buildItemCounts()
+		for k, serverTotal in pairs(serverCounts) do
+			local diff = serverTotal - (clientCounts[k] or 0)
+			for _ = 1, diff do
+				local src = serverItemsByKey[k]
+				local newItem = {}; for field, val in pairs(src) do newItem[field] = val end
+				insertNewItem(newItem)
+			end
+		end
+		State.equippedSlot = data.equipped
+	end
+	rebuildUI()
+end)
+
+brainrotCollected.OnClientEvent:Connect(function(_slot, itemRecord)
+	if itemRecord and itemRecord.modelName then resolveIcon(itemRecord) end
+	for _, gui in ipairs(playerGui:GetChildren()) do
+		if gui.Name == "TimerGui" or gui.Name == "TimerDisplay" then gui.Enabled = false end
+	end
+	for _, d in ipairs(workspace:GetDescendants()) do
+		if d:IsA("BillboardGui") and d.Name == "TimerGui" then d.Enabled = false end
+	end
+end)
+
+local tiOpen  = TweenInfo.new(CFG.TWEEN_IN,  Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+local tiClose = TweenInfo.new(CFG.TWEEN_OUT, Enum.EasingStyle.Quart, Enum.EasingDirection.In)
+
+local function toggleBackpack()
+	State.panelOpen = not State.panelOpen
+	if State.panelOpen then
+		panelReady = false; UI.panel.Visible = true; UI.panel.Position = PANEL_HIDE
+		local tw = TweenService:Create(UI.panel, tiOpen, {Position = PANEL_SHOW})
+		tw:Play(); tw.Completed:Once(function() panelReady = true; rebuildBag() end)
+		UI.toggleStroke.Color = CFG.C_BTN_OPEN
+	else
+		panelReady = false
+		local tw = TweenService:Create(UI.panel, tiClose, {Position = PANEL_HIDE})
+		tw:Play(); tw.Completed:Once(function() UI.panel.Visible = false end)
+		UI.toggleStroke.Color = CFG.C_BTN_BORDER
+	end
+end
+UI.toggleBtn.MouseButton1Click:Connect(toggleBackpack)
+-- Mobile: also respond to TouchTap on toggle button
+UI.toggleBtn.TouchTap:Connect(toggleBackpack)
+
+local KEY_SLOTS = {
+	[Enum.KeyCode.One]=1, [Enum.KeyCode.Two]=2, [Enum.KeyCode.Three]=3,
+	[Enum.KeyCode.Four]=4, [Enum.KeyCode.Five]=5, [Enum.KeyCode.Six]=6,
+	[Enum.KeyCode.Seven]=7, [Enum.KeyCode.Eight]=8, [Enum.KeyCode.Nine]=9,
+	[Enum.KeyCode.Zero]=10,
+}
+UserInputService.InputBegan:Connect(function(inp, proc)
+	if proc then return end
+	if inp.KeyCode == Enum.KeyCode.Tab or inp.KeyCode == Enum.KeyCode.B then
+		toggleBackpack(); return
+	end
+	local s = KEY_SLOTS[inp.KeyCode]
+	if s and State.hotbar[s] then handleSlotTap(s, State.hotbar[s]) end
+end)
+
+UI.search:GetPropertyChangedSignal("Text"):Connect(function()
+	local q = UI.search.Text:lower()
+	for _, c in ipairs(UI.bagScroll:GetChildren()) do
+		if c:IsA("Frame") then
+			local idx = c:GetAttribute("BagIndex")
+			local item = idx and State.bag[idx]
+			if item then c.Visible = q == "" or (item.name:lower():find(q, 1, true) ~= nil) end
+		end
+	end
+end)
+
+print("[BackpackClient] Ready")
