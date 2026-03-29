@@ -2055,11 +2055,10 @@ do
 
 	-- ── Overflow ────────────────────────────────────────────────────────
 	wLabel("OVERFLOW",284)
-	wHint("Scales water up from its base indefinitely — press END to stop",302)
-	wBtn("OVERFLOW",C.btnRed,C.btnRedDk,HALF,34,PAD,320,function()
+	wBtn("OVERFLOW",C.btnRed,C.btnRedDk,HALF,34,PAD,302,function()
 		adminRemote:FireServer("water_overflow"); showFeedback("Overflow started!")
 	end)
-	wBtn("END",C.btnOrange,C.btnOrangeDk,HALF,34,PAD+HALF+6,320,function()
+	wBtn("END",C.btnOrange,C.btnOrangeDk,HALF,34,PAD+HALF+6,302,function()
 		adminRemote:FireServer("water_end_overflow"); showFeedback("Overflow ended")
 	end)
 

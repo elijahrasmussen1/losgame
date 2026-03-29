@@ -169,10 +169,8 @@ waterAPI.OnInvoke = function(action, value)
 		if nukeActive then
 			nukeActive = false
 			for _, e in ipairs(waterEntries) do
-				e.part.Parent     = e.origParent
-				e.part.CanCollide = true
-				e.part.CanTouch   = true
-				e.part.Material   = e.startMat
+				e.part.Parent   = e.origParent
+				e.part.Material = e.startMat
 			end
 			resetAll()
 		end
@@ -198,7 +196,7 @@ waterAPI.OnInvoke = function(action, value)
 				endConn = overflowEndSignal.Event:Connect(function()
 					ended = true
 				end)
-				while not ended do
+				while not ended and elapsed2 < 25 do
 					local dt = RunService.Heartbeat:Wait()
 					elapsed2 += dt
 					for i, e in ipairs(waterEntries) do
@@ -221,21 +219,22 @@ waterAPI.OnInvoke = function(action, value)
 			overflowEndSignal:Fire()
 			task.spawn(function()
 				for _, e in ipairs(waterEntries) do
+					if not nukeActive then break end
 					-- Capture world position BEFORE reparenting
 					local pos = e.part.Position
 					-- Spawn large explosion at the part's last known position
 					local exp = Instance.new("Explosion")
 					exp.Position                  = pos
-					exp.BlastRadius               = 60
+					exp.BlastRadius               = 100
 					exp.BlastPressure             = 0
 					exp.ExplosionType             = Enum.ExplosionType.NoCraters
 					exp.DestroyJointRadiusPercent = 0
 					exp.Parent                    = workspace
 					-- Move part out of Workspace entirely — this is the only 100%
 					-- reliable way to kill both rendering and physics in Roblox.
-					e.part.CanCollide = false
-					e.part.CanTouch   = false
-					e.part.Parent     = ServerStorage
+					-- CanCollide is intentionally left TRUE so it is always
+					-- collidable the moment the part returns to Workspace.
+					e.part.Parent = ServerStorage
 					task.wait(0.05) -- stagger cascade
 				end
 			end)
@@ -245,10 +244,8 @@ waterAPI.OnInvoke = function(action, value)
 			nukeActive = false
 			for _, e in ipairs(waterEntries) do
 				-- Restore to original parent so it appears in the world again
-				e.part.Parent     = e.origParent
-				e.part.CanCollide = true
-				e.part.CanTouch   = true
-				e.part.Material   = e.startMat
+				e.part.Parent   = e.origParent
+				e.part.Material = e.startMat
 			end
 			resetAll()
 		end
