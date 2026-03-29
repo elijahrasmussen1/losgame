@@ -129,6 +129,7 @@ end
 -- ── State ─────────────────────────────────────────────────────────────────────
 local userPaused      = false
 local overflowRunning = false
+local nukeActive      = false
 
 local overflowEndSignal        = Instance.new("BindableEvent")
 overflowEndSignal.Name         = "OverflowEndSignal"
@@ -190,6 +191,36 @@ waterAPI.OnInvoke = function(action, value)
 		end
 	elseif action == "EndOverflow" then
 		overflowEndSignal:Fire()
+	elseif action == "NukeWater" then
+		if not nukeActive then
+			nukeActive = true
+			-- End any running overflow first
+			overflowEndSignal:Fire()
+			task.spawn(function()
+				for _, e in ipairs(waterEntries) do
+					-- Spawn a Roblox explosion at the part's position
+					local exp = Instance.new("Explosion")
+					exp.Position           = e.part.Position
+					exp.BlastRadius        = 20
+					exp.BlastPressure      = 0          -- visual only, no physics push
+					exp.ExplosionType      = Enum.ExplosionType.NoCraters
+					exp.DestroyJointRadiusPercent = 0
+					exp.Parent             = workspace
+					-- Hide the part
+					e.part.Transparency    = 1
+					e.part.CanCollide      = false
+				end
+			end)
+		end
+	elseif action == "EndNuke" then
+		if nukeActive then
+			nukeActive = false
+			resetAll()
+			for _, e in ipairs(waterEntries) do
+				e.part.Transparency = 0
+				e.part.CanCollide   = true
+			end
+		end
 	end
 	return true
 end
@@ -199,8 +230,8 @@ print("[WaterRise] System started.")
 resetAll()
 
 while true do
-	-- Wait for any active overflow to complete before starting a new cycle
-	while overflowRunning do task.wait(0.1) end
+	-- Wait for any active overflow or nuke to complete before starting a new cycle
+	while overflowRunning or nukeActive do task.wait(0.1) end
 
 	local riseDist = 0
 	for _, e in ipairs(waterEntries) do
@@ -214,22 +245,22 @@ while true do
 	-- Idle wait (interruptible by overflow or pause)
 	local idleElapsed = 0
 	while idleElapsed < idleTime do
-		if overflowRunning then break end
+		if overflowRunning or nukeActive then break end
 		if userPaused then task.wait(0.05) continue end
 		local dt = RunService.Heartbeat:Wait()
 		idleElapsed += dt
 	end
-	if overflowRunning then continue end
+	if overflowRunning or nukeActive then continue end
 
 	runCountdown()
-	if overflowRunning then continue end
+	if overflowRunning or nukeActive then continue end
 
 	-- Rise
 	print("[WaterRise] Rising...")
 	local elapsed = 0
 	local totalRiseTime = riseDist / RISE_SPEED
 	while elapsed < totalRiseTime do
-		if overflowRunning then break end
+		if overflowRunning or nukeActive then break end
 		if userPaused then task.wait(0.05) continue end
 		local dt = RunService.Heartbeat:Wait()
 		elapsed += dt
@@ -238,7 +269,7 @@ while true do
 			setWaterY(e, e.startY + (e.maxY - e.startY) * t)
 		end
 	end
-	if overflowRunning then continue end
+	if overflowRunning or nukeActive then continue end
 	for _, e in ipairs(waterEntries) do
 		setWaterY(e, e.maxY)
 	end
@@ -247,19 +278,19 @@ while true do
 	print("[WaterRise] Pausing at max for " .. PAUSE_AT_MAX .. "s.")
 	local pauseElapsed = 0
 	while pauseElapsed < PAUSE_AT_MAX do
-		if overflowRunning then break end
+		if overflowRunning or nukeActive then break end
 		if userPaused then task.wait(0.05) continue end
 		local dt = RunService.Heartbeat:Wait()
 		pauseElapsed += dt
 	end
-	if overflowRunning then continue end
+	if overflowRunning or nukeActive then continue end
 
 	-- Lower
 	print("[WaterRise] Lowering...")
 	elapsed = 0
 	local totalLowerTime = riseDist / LOWER_SPEED
 	while elapsed < totalLowerTime do
-		if overflowRunning then break end
+		if overflowRunning or nukeActive then break end
 		if userPaused then task.wait(0.05) continue end
 		local dt = RunService.Heartbeat:Wait()
 		elapsed += dt
@@ -268,7 +299,7 @@ while true do
 			setWaterY(e, e.maxY - (e.maxY - e.startY) * t)
 		end
 	end
-	if overflowRunning then continue end
+	if overflowRunning or nukeActive then continue end
 	for _, e in ipairs(waterEntries) do
 		setWaterY(e, e.startY)
 	end

@@ -1438,7 +1438,7 @@ local function selectTab(index)
 	end
 end
 
-local TAB_NAMES={"EVENTS","ECONOMY","SPEED","ITEMS","FUSE MACHINE","BAN LOGS","MISC","WATER"}
+local TAB_NAMES={"EVENTS","ECONOMY","SPEED","ITEMS","FUSE MACHINE","BAN LOGS","WATER","MISC"}
 for i,name in ipairs(TAB_NAMES) do
 	local tbtn=Instance.new("TextButton")
 	tbtn.Name=name; tbtn.Size=UDim2.new(0,TAB_W,1,0); tbtn.BackgroundColor3=C.tabOff
@@ -1927,9 +1927,9 @@ do
 	end
 end
 
--- ── MISC (7) ──────────────────────────────────────────────────────────────
+-- ── MISC (8) ──────────────────────────────────────────────────────────────
 do
-	local page=tabs[7].page; local CW=WIN_W-PAD*2
+	local page=tabs[8].page; local CW=WIN_W-PAD*2
 	mkSectionLabel(page,"TARGET PLAYER",10)
 	local targetInput=Instance.new("TextBox")
 	targetInput.Size=UDim2.new(1,-PAD*2,0,32); targetInput.Position=UDim2.new(0,PAD,0,34)
@@ -1989,9 +1989,9 @@ do
 end
 
 
--- ── WATER (8) ──────────────────────────────────────────────────────────────
+-- ── WATER (7) ──────────────────────────────────────────────────────────────
 do
-	local page=tabs[8].page; local CW=WIN_W-PAD*2
+	local page=tabs[7].page; local CW=WIN_W-PAD*2
 	local HALF=math.floor((CW-6)/2)
 
 	-- Scrollable container fills the whole page
@@ -1999,7 +1999,7 @@ do
 	wScroll.Name="WaterScroll"; wScroll.Size=UDim2.new(1,0,1,0)
 	wScroll.Position=UDim2.new(0,0,0,0); wScroll.BackgroundTransparency=1
 	wScroll.BorderSizePixel=0; wScroll.ScrollBarThickness=4
-	wScroll.ScrollBarImageColor3=C.winBorder; wScroll.CanvasSize=UDim2.new(0,0,0,640)
+	wScroll.ScrollBarImageColor3=C.winBorder; wScroll.CanvasSize=UDim2.new(0,0,0,800)
 	wScroll.ScrollingDirection=Enum.ScrollingDirection.Y
 	wScroll.ElasticBehavior=Enum.ElasticBehavior.Never
 	wScroll.ZIndex=4; wScroll.Parent=page
@@ -2081,6 +2081,16 @@ do
 		local v=tonumber(cdInput.Text)
 		if not v or v<0 then showToast("Enter 0 or a positive number") return end
 		adminRemote:FireServer("water_set_countdown",v); showFeedback("Countdown -> "..v.."s")
+	end)
+
+	-- ── Nuke Water ───────────────────────────────────────────────────────
+	wLabel("NUKE WATER",610)
+	wHint("Deletes water + explosion. Press END NUKE to restore.",630)
+	wBtn("NUKE WATER",C.btnRed,C.btnRedDk,HALF,34,PAD,648,function()
+		adminRemote:FireServer("water_nuke"); showFeedback("Water nuked!")
+	end)
+	wBtn("END NUKE",C.btnOrange,C.btnOrangeDk,HALF,34,PAD+HALF+6,648,function()
+		adminRemote:FireServer("water_end_nuke"); showFeedback("Water restored")
 	end)
 end
 
