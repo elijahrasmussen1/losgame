@@ -1,1 +1,131 @@
+-- ServerScriptService/thiswaterinfinite.server.lua
+-- Infinite water floor – chunk-based, generates around every player
+-- made by elijxhraz
 
+local RunService = game:GetService("RunService")
+local Players    = game:GetService("Players")
+
+-- ====== CONFIGURATION ======
+local WATER_Y          = -9.282   -- Y position of the water surface (studs)
+local CHUNK_SIZE       = 1024     -- studs per chunk side (power of 2 recommended)
+local RENDER_DISTANCE  = 4        -- chunks loaded in each direction from a player
+local UNLOAD_BUFFER    = 2        -- extra chunks beyond render distance before unloading
+local CHECK_INTERVAL   = 1.5      -- seconds between chunk update passes
+local WATER_COLOR      = Color3.fromRGB(9, 137, 207)
+local WATER_TRANSPARENCY = 0.25
+local WATER_REFLECTANCE  = 0.1
+local CHUNK_THICKNESS    = 4      -- depth of each water slab (studs)
+-- ===========================
+
+local loadedChunks = {}  -- ["cx,cz"] = Part
+
+local chunkFolder      = Instance.new("Folder")
+chunkFolder.Name       = "InfiniteWaterChunks"
+chunkFolder.Parent     = workspace
+
+-- Convert a world position to chunk coordinates
+local function worldToChunk(x, z)
+	return math.floor(x / CHUNK_SIZE), math.floor(z / CHUNK_SIZE)
+end
+
+local function chunkKey(cx, cz)
+	return cx .. "," .. cz
+end
+
+local function createChunk(cx, cz)
+	local part           = Instance.new("Part")
+	part.Name            = string.format("WaterChunk_%d_%d", cx, cz)
+	part.Size            = Vector3.new(CHUNK_SIZE, CHUNK_THICKNESS, CHUNK_SIZE)
+	part.Position        = Vector3.new(
+		cx * CHUNK_SIZE + CHUNK_SIZE * 0.5,
+		WATER_Y - CHUNK_THICKNESS * 0.5,
+		cz * CHUNK_SIZE + CHUNK_SIZE * 0.5
+	)
+	part.Anchored        = true
+	part.CanCollide      = true
+	part.CastShadow      = false
+	part.Material        = Enum.Material.Water
+	part.Color           = WATER_COLOR
+	part.Transparency    = WATER_TRANSPARENCY
+	part.Reflectance     = WATER_REFLECTANCE
+	part.Parent          = chunkFolder
+	return part
+end
+
+-- Collect every chunk coordinate needed for all players right now
+local function getRequiredKeys()
+	local required = {}
+	for _, player in ipairs(Players:GetPlayers()) do
+		local char = player.Character
+		if not char then continue end
+		local root = char:FindFirstChild("HumanoidRootPart")
+		if not root then continue end
+		local cx, cz = worldToChunk(root.Position.X, root.Position.Z)
+		for dx = -RENDER_DISTANCE, RENDER_DISTANCE do
+			for dz = -RENDER_DISTANCE, RENDER_DISTANCE do
+				required[chunkKey(cx + dx, cz + dz)] = { cx + dx, cz + dz }
+			end
+		end
+	end
+	return required
+end
+
+-- Expand the required set by UNLOAD_BUFFER to define the unload boundary
+local function getUnloadKeys()
+	local boundary = {}
+	for _, player in ipairs(Players:GetPlayers()) do
+		local char = player.Character
+		if not char then continue end
+		local root = char:FindFirstChild("HumanoidRootPart")
+		if not root then continue end
+		local cx, cz = worldToChunk(root.Position.X, root.Position.Z)
+		local limit = RENDER_DISTANCE + UNLOAD_BUFFER
+		for dx = -limit, limit do
+			for dz = -limit, limit do
+				boundary[chunkKey(cx + dx, cz + dz)] = true
+			end
+		end
+	end
+	return boundary
+end
+
+local function updateChunks()
+	local required = getRequiredKeys()
+	local boundary = getUnloadKeys()
+
+	-- Load missing chunks
+	for key, coords in pairs(required) do
+		if not loadedChunks[key] then
+			loadedChunks[key] = createChunk(coords[1], coords[2])
+		end
+	end
+
+	-- Unload chunks that are outside every player's unload boundary
+	for key, part in pairs(loadedChunks) do
+		if not boundary[key] then
+			part:Destroy()
+			loadedChunks[key] = nil
+		end
+	end
+end
+
+-- ── Startup ───────────────────────────────────────────────────────────────────
+updateChunks()
+
+local elapsed = 0
+RunService.Heartbeat:Connect(function(dt)
+	elapsed += dt
+	if elapsed >= CHECK_INTERVAL then
+		elapsed = 0
+		updateChunks()
+	end
+end)
+
+Players.PlayerAdded:Connect(function(player)
+	player.CharacterAdded:Connect(function()
+		task.wait(1)
+		updateChunks()
+	end)
+end)
+
+print("[InfiniteWater] Infinite water floor active.")
