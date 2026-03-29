@@ -27,14 +27,14 @@ local CFG = {
 	HOTBAR_SLOT_PX  = 58,
 	HOTBAR_GAP      = 5,
 	HOTBAR_CORNER   = 8,
-	HOTBAR_MAX      = 10,
+	HOTBAR_MAX      = 7,
 	BAG_SLOT_W      = 58,
 	BAG_SLOT_H      = 58,
 	BAG_SLOT_CORNER = 8,
 	BAG_GAP         = 5,
 	PANEL_W_SCALE   = 0.55,
 	PANEL_H         = 290,
-	PANEL_NUDGE     = 40,
+	PANEL_NUDGE     = 14,
 	BTN_PX          = 40,
 	BTN_LEFT        = 236,
 	BTN_TOP         = 36,
@@ -429,13 +429,15 @@ btnIco.ScaleType = Enum.ScaleType.Fit; btnIco.ZIndex = 21; btnIco.Parent = UI.to
 UI.hotbarWrap = Instance.new("Frame")
 UI.hotbarWrap.Name = "HotbarWrap"; UI.hotbarWrap.AnchorPoint = Vector2.new(0.5,1)
 UI.hotbarWrap.Position = UDim2.new(0.5,0,1,-(BOTTOM_SAFE+2))
-UI.hotbarWrap.Size = UDim2.new(0,CFG.HOTBAR_SLOT_PX,0,HOTBAR_H)
-UI.hotbarWrap.BackgroundTransparency = 1; UI.hotbarWrap.Parent = mainGui
+UI.hotbarWrap.Size = UDim2.new(CFG.PANEL_W_SCALE,0,0,HOTBAR_H)
+UI.hotbarWrap.BackgroundColor3 = CFG.C_BG; UI.hotbarWrap.BackgroundTransparency = 0.45
+UI.hotbarWrap.BorderSizePixel = 0; UI.hotbarWrap.Parent = mainGui
+mkCorner(UI.hotbarWrap, UDim.new(0,10))
 
 UI.hotbarRow = Instance.new("Frame")
 UI.hotbarRow.Name = "HotbarRow"; UI.hotbarRow.AnchorPoint = Vector2.new(0.5,0)
 UI.hotbarRow.Position = UDim2.new(0.5,0,0,0)
-UI.hotbarRow.Size = UDim2.new(0,CFG.HOTBAR_SLOT_PX,0,CFG.HOTBAR_SLOT_PX)
+UI.hotbarRow.Size = UDim2.new(1,0,0,CFG.HOTBAR_SLOT_PX)
 UI.hotbarRow.BackgroundTransparency = 1; UI.hotbarRow.Parent = UI.hotbarWrap
 local hbList = Instance.new("UIListLayout")
 hbList.FillDirection = Enum.FillDirection.Horizontal
@@ -447,7 +449,7 @@ hbList.SortOrder = Enum.SortOrder.LayoutOrder; hbList.Parent = UI.hotbarRow
 UI.numRow = Instance.new("Frame")
 UI.numRow.Name = "NumRow"; UI.numRow.AnchorPoint = Vector2.new(0.5,0)
 UI.numRow.Position = UDim2.new(0.5,0,0,CFG.HOTBAR_SLOT_PX+3)
-UI.numRow.Size = UDim2.new(0,CFG.HOTBAR_SLOT_PX,0,14)
+UI.numRow.Size = UDim2.new(1,0,0,14)
 UI.numRow.BackgroundTransparency = 1; UI.numRow.Parent = UI.hotbarWrap
 local numList = Instance.new("UIListLayout")
 numList.FillDirection = Enum.FillDirection.Horizontal
@@ -458,7 +460,7 @@ numList.SortOrder = Enum.SortOrder.LayoutOrder; numList.Parent = UI.numRow
 UI.panel = Instance.new("Frame")
 UI.panel.Name = "Panel"; UI.panel.AnchorPoint = Vector2.new(0.5,1)
 UI.panel.Position = PANEL_HIDE; UI.panel.Size = UDim2.new(CFG.PANEL_W_SCALE,0,0,CFG.PANEL_H)
-UI.panel.BackgroundColor3 = CFG.C_BG; UI.panel.BackgroundTransparency = 0.12
+UI.panel.BackgroundColor3 = CFG.C_BG; UI.panel.BackgroundTransparency = 0.45
 UI.panel.BorderSizePixel = 0; UI.panel.Visible = false; UI.panel.Parent = mainGui
 mkCorner(UI.panel, UDim.new(0,10)); mkStroke(UI.panel, CFG.C_PANEL_BORDER, 1); mkPad(UI.panel, 8)
 
@@ -694,27 +696,32 @@ rebuildHotbar = function()
 	for _, f in pairs(hotbarFrames) do if f then f:Destroy() end end
 	hotbarFrames = {}
 	for _, c in ipairs(UI.numRow:GetChildren()) do if c:IsA("TextLabel") then c:Destroy() end end
-	local count = 0
-	for i = 1, CFG.HOTBAR_MAX do if State.hotbar[i] then count = count + 1 end end
-	local totalW = math.max(CFG.HOTBAR_SLOT_PX,
-		count * (CFG.HOTBAR_SLOT_PX + CFG.HOTBAR_GAP) - (count > 0 and CFG.HOTBAR_GAP or 0))
-	UI.hotbarWrap.Size = UDim2.new(0,totalW,0,HOTBAR_H)
-	UI.hotbarRow.Size  = UDim2.new(0,totalW,0,CFG.HOTBAR_SLOT_PX)
-	UI.numRow.Size     = UDim2.new(0,totalW,0,14)
+	UI.hotbarWrap.Size = UDim2.new(CFG.PANEL_W_SCALE, 0, 0, HOTBAR_H)
+	UI.hotbarRow.Size  = UDim2.new(1, 0, 0, CFG.HOTBAR_SLOT_PX)
+	UI.numRow.Size     = UDim2.new(1, 0, 0, 14)
 	for i = 1, CFG.HOTBAR_MAX do
 		local item = State.hotbar[i]
-		if not item then continue end
+		-- Number label (always, even for empty slots)
+		local nl = Instance.new("TextLabel")
+		nl.Size = UDim2.new(0,CFG.HOTBAR_SLOT_PX,0,14); nl.BackgroundTransparency = 1
+		nl.Text = tostring(i); nl.TextColor3 = CFG.C_NUM
+		nl.Font = Enum.Font.GothamBold; nl.TextSize = 10
+		nl.TextXAlignment = Enum.TextXAlignment.Center
+		nl.LayoutOrder = i; nl.Parent = UI.numRow
+		if not item then
+			-- Empty slot frame
+			local f = Instance.new("Frame")
+			f.Size = UDim2.new(0,CFG.HOTBAR_SLOT_PX,0,CFG.HOTBAR_SLOT_PX)
+			f.BackgroundColor3 = CFG.C_SLOT; f.BorderSizePixel = 0
+			f.Name = "HSlot"..i; f.LayoutOrder = i; f.Parent = UI.hotbarRow
+			hotbarFrames[i] = f
+			mkCorner(f, UDim.new(0,CFG.HOTBAR_CORNER)); mkStroke(f, CFG.C_BORDER, 1.5)
+			continue
+		end
 		local isEq = State.equippedSlot == i
 		local f, btn = makeSlotCard(UI.hotbarRow, item,
 			CFG.HOTBAR_SLOT_PX, CFG.HOTBAR_SLOT_PX, CFG.HOTBAR_CORNER, 1, isEq)
 		f.Name = "HSlot"..i; f.LayoutOrder = i; hotbarFrames[i] = f
-
-		local nl = Instance.new("TextLabel")
-		nl.Size = UDim2.new(0,CFG.HOTBAR_SLOT_PX,0,14); nl.BackgroundTransparency = 1
-		nl.Text = tostring(i == 10 and 0 or i); nl.TextColor3 = CFG.C_NUM
-		nl.Font = Enum.Font.GothamBold; nl.TextSize = 10
-		nl.TextXAlignment = Enum.TextXAlignment.Center
-		nl.LayoutOrder = i; nl.Parent = UI.numRow
 
 		-- Mouse down (desktop drag start)
 		btn.MouseButton1Down:Connect(function()
