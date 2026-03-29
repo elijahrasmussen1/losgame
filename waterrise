@@ -84,9 +84,10 @@ for _, config in ipairs(waterConfigs) do
 	waterPart.Anchored = true
 
 	table.insert(waterEntries, {
-		part   = waterPart,
-		startY = config.startY,
-		maxY   = config.maxY,
+		part       = waterPart,
+		startY     = config.startY,
+		maxY       = config.maxY,
+		startSizeY = waterPart.Size.Y,
 	})
 
 	print(string.format("[WaterRise] Registered: %s  startY=%.3f  maxY=%.3f",
@@ -101,6 +102,7 @@ end
 local function resetAll()
 	for _, e in ipairs(waterEntries) do
 		setWaterY(e, e.startY)
+		e.part.Size = Vector3.new(e.part.Size.X, e.startSizeY, e.part.Size.Z)
 	end
 end
 
@@ -144,6 +146,12 @@ waterAPI.OnInvoke = function(action, value)
 	elseif action == "SetLowerSpeed" then
 		local v = tonumber(value)
 		if v and v > 0 then LOWER_SPEED = v end
+	elseif action == "SetCycleTime" then
+		local v = tonumber(value)
+		if v and v > 0 then CYCLE_TIME = v end
+	elseif action == "SetCountdown" then
+		local v = tonumber(value)
+		if v and v >= 0 then COUNTDOWN_SECONDS = math.floor(v) end
 	elseif action == "Pause" then
 		userPaused = true
 	elseif action == "Resume" then
@@ -153,9 +161,13 @@ waterAPI.OnInvoke = function(action, value)
 			overflowRunning = true
 			task.spawn(function()
 				local elapsed2  = 0
-				local startYs   = {}
+				-- Capture the bottom Y and original size of each part so we
+				-- scale upward from the bottom (part grows, bottom stays fixed).
+				local bottomYs  = {}
+				local origSizes = {}
 				for i, e in ipairs(waterEntries) do
-					startYs[i] = e.part.Position.Y
+					origSizes[i] = e.part.Size.Y
+					bottomYs[i]  = e.part.Position.Y - origSizes[i] * 0.5
 				end
 				local ended  = false
 				local endConn
@@ -166,7 +178,9 @@ waterAPI.OnInvoke = function(action, value)
 					local dt = RunService.Heartbeat:Wait()
 					elapsed2 += dt
 					for i, e in ipairs(waterEntries) do
-						setWaterY(e, startYs[i] + elapsed2 * RISE_SPEED)
+						local newSizeY = origSizes[i] + elapsed2 * RISE_SPEED
+						e.part.Size     = Vector3.new(e.part.Size.X, newSizeY, e.part.Size.Z)
+						e.part.Position = Vector3.new(e.part.Position.X, bottomYs[i] + newSizeY * 0.5, e.part.Position.Z)
 					end
 				end
 				endConn:Disconnect()

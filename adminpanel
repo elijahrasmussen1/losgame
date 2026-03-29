@@ -1994,59 +1994,93 @@ do
 	local page=tabs[8].page; local CW=WIN_W-PAD*2
 	local HALF=math.floor((CW-6)/2)
 
-	-- Rise Speed
-	mkSectionLabel(page,"RISE SPEED",10)
-	local riseInput=Instance.new("TextBox")
-	riseInput.Size=UDim2.new(1,-PAD*2,0,32); riseInput.Position=UDim2.new(0,PAD,0,34)
-	riseInput.BackgroundColor3=C.inputBg; riseInput.BorderSizePixel=0
-	riseInput.PlaceholderText="Default: 6"; riseInput.PlaceholderColor3=C.phCol
-	riseInput.Text=""; riseInput.TextColor3=C.inputText; riseInput.Font=Enum.Font.Gotham
-	riseInput.TextSize=13; riseInput.TextXAlignment=Enum.TextXAlignment.Center
-	riseInput.ClearTextOnFocus=false; riseInput.ZIndex=5; riseInput.Parent=page
-	mkCorner(riseInput,UDim.new(0,4)); mkStroke(riseInput,C.inputBdr,1)
-	mkBtn(page,"SET RISE SPEED",C.btnCyan,C.btnCyanDk,CW,34,PAD,78,function()
+	-- Scrollable container fills the whole page
+	local wScroll=Instance.new("ScrollingFrame")
+	wScroll.Name="WaterScroll"; wScroll.Size=UDim2.new(1,0,1,0)
+	wScroll.Position=UDim2.new(0,0,0,0); wScroll.BackgroundTransparency=1
+	wScroll.BorderSizePixel=0; wScroll.ScrollBarThickness=4
+	wScroll.ScrollBarImageColor3=C.winBorder; wScroll.CanvasSize=UDim2.new(0,0,0,640)
+	wScroll.ScrollingDirection=Enum.ScrollingDirection.Y
+	wScroll.ElasticBehavior=Enum.ElasticBehavior.Never
+	wScroll.ZIndex=4; wScroll.Parent=page
+
+	local function wLabel(text,y)
+		local l=mkSectionLabel(wScroll,text,y); l.ZIndex=5; return l
+	end
+	local function wHint(text,y)
+		local h=Instance.new("TextLabel"); h.Size=UDim2.new(1,-PAD*2,0,14)
+		h.Position=UDim2.new(0,PAD,0,y); h.BackgroundTransparency=1
+		h.Text=text; h.TextColor3=C.textDim; h.Font=Enum.Font.Gotham; h.TextSize=11
+		h.TextXAlignment=Enum.TextXAlignment.Center; h.ZIndex=5; h.Parent=wScroll; return h
+	end
+	local function wInput(placeholder,y)
+		local i=Instance.new("TextBox"); i.Size=UDim2.new(1,-PAD*2,0,32)
+		i.Position=UDim2.new(0,PAD,0,y); i.BackgroundColor3=C.inputBg; i.BorderSizePixel=0
+		i.PlaceholderText=placeholder; i.PlaceholderColor3=C.phCol
+		i.Text=""; i.TextColor3=C.inputText; i.Font=Enum.Font.Gotham
+		i.TextSize=13; i.TextXAlignment=Enum.TextXAlignment.Center
+		i.ClearTextOnFocus=false; i.ZIndex=5; i.Parent=wScroll
+		mkCorner(i,UDim.new(0,4)); mkStroke(i,C.inputBdr,1); return i
+	end
+	local function wBtn(lbl,bg,dk,w,h,x,y,cb)
+		local b=mkBtn(wScroll,lbl,bg,dk,w,h,x,y,cb); b.ZIndex=5; return b
+	end
+
+	-- ── Rise Speed ──────────────────────────────────────────────────────
+	wLabel("RISE SPEED",8)
+	local riseInput=wInput("Default: 6",30)
+	wBtn("SET RISE SPEED",C.btnCyan,C.btnCyanDk,CW,32,PAD,68,function()
 		local v=tonumber(riseInput.Text)
 		if not v or v<=0 then showToast("Enter a positive number") return end
 		adminRemote:FireServer("water_set_rise_speed",v); showFeedback("Rise speed -> "..v)
 	end)
 
-	-- Lower Speed
-	mkSectionLabel(page,"LOWER SPEED",124)
-	local lowerInput=Instance.new("TextBox")
-	lowerInput.Size=UDim2.new(1,-PAD*2,0,32); lowerInput.Position=UDim2.new(0,PAD,0,148)
-	lowerInput.BackgroundColor3=C.inputBg; lowerInput.BorderSizePixel=0
-	lowerInput.PlaceholderText="Default: 50"; lowerInput.PlaceholderColor3=C.phCol
-	lowerInput.Text=""; lowerInput.TextColor3=C.inputText; lowerInput.Font=Enum.Font.Gotham
-	lowerInput.TextSize=13; lowerInput.TextXAlignment=Enum.TextXAlignment.Center
-	lowerInput.ClearTextOnFocus=false; lowerInput.ZIndex=5; lowerInput.Parent=page
-	mkCorner(lowerInput,UDim.new(0,4)); mkStroke(lowerInput,C.inputBdr,1)
-	mkBtn(page,"SET LOWER SPEED",C.btnCyan,C.btnCyanDk,CW,34,PAD,192,function()
+	-- ── Lower Speed ─────────────────────────────────────────────────────
+	wLabel("LOWER SPEED",112)
+	local lowerInput=wInput("Default: 50",134)
+	wBtn("SET LOWER SPEED",C.btnCyan,C.btnCyanDk,CW,32,PAD,172,function()
 		local v=tonumber(lowerInput.Text)
 		if not v or v<=0 then showToast("Enter a positive number") return end
 		adminRemote:FireServer("water_set_lower_speed",v); showFeedback("Lower speed -> "..v)
 	end)
 
-	-- Pause / Resume
-	mkSectionLabel(page,"PAUSE / RESUME",238)
-	mkBtn(page,"PAUSE",C.btnOlive,C.btnOliveDk,HALF,36,PAD,262,function()
+	-- ── Pause / Resume ──────────────────────────────────────────────────
+	wLabel("PAUSE / RESUME",216)
+	wBtn("PAUSE",C.btnOlive,C.btnOliveDk,HALF,34,PAD,238,function()
 		adminRemote:FireServer("water_pause"); showFeedback("Water paused")
 	end)
-	mkBtn(page,"RESUME",C.btnGreen,C.btnGreenDk,HALF,36,PAD+HALF+6,262,function()
+	wBtn("RESUME",C.btnGreen,C.btnGreenDk,HALF,34,PAD+HALF+6,238,function()
 		adminRemote:FireServer("water_resume"); showFeedback("Water resumed")
 	end)
 
-	-- Overflow
-	mkSectionLabel(page,"OVERFLOW",314)
-	local ovHint=Instance.new("TextLabel"); ovHint.Size=UDim2.new(1,-PAD*2,0,16)
-	ovHint.Position=UDim2.new(0,PAD,0,336); ovHint.BackgroundTransparency=1
-	ovHint.Text="Rises infinitely for 45s or until END is pressed"; ovHint.TextColor3=C.textDim
-	ovHint.Font=Enum.Font.Gotham; ovHint.TextSize=11
-	ovHint.TextXAlignment=Enum.TextXAlignment.Center; ovHint.ZIndex=5; ovHint.Parent=page
-	mkBtn(page,"OVERFLOW",C.btnRed,C.btnRedDk,HALF,36,PAD,356,function()
+	-- ── Overflow ────────────────────────────────────────────────────────
+	wLabel("OVERFLOW",284)
+	wHint("Scales water up from its base — 45s max or press END",302)
+	wBtn("OVERFLOW",C.btnRed,C.btnRedDk,HALF,34,PAD,320,function()
 		adminRemote:FireServer("water_overflow"); showFeedback("Overflow started!")
 	end)
-	mkBtn(page,"END",C.btnOrange,C.btnOrangeDk,HALF,36,PAD+HALF+6,356,function()
+	wBtn("END",C.btnOrange,C.btnOrangeDk,HALF,34,PAD+HALF+6,320,function()
 		adminRemote:FireServer("water_end_overflow"); showFeedback("Overflow ended")
+	end)
+
+	-- ── Rise Cycle ──────────────────────────────────────────────────────
+	wLabel("RISE CYCLE",366)
+	wHint("How fast / slow the rise cycle is (seconds)",386)
+	local cycleInput=wInput("Default: 40",404)
+	wBtn("SET RISE CYCLE",C.btnCyan,C.btnCyanDk,CW,32,PAD,442,function()
+		local v=tonumber(cycleInput.Text)
+		if not v or v<=0 then showToast("Enter a positive number") return end
+		adminRemote:FireServer("water_set_cycle_time",v); showFeedback("Cycle time -> "..v.."s")
+	end)
+
+	-- ── Countdown Seconds ───────────────────────────────────────────────
+	wLabel("COUNTDOWN SECONDS",488)
+	wHint("How long the countdown before water rises (seconds)",508)
+	local cdInput=wInput("Default: 5",526)
+	wBtn("SET COUNTDOWN",C.btnCyan,C.btnCyanDk,CW,32,PAD,564,function()
+		local v=tonumber(cdInput.Text)
+		if not v or v<0 then showToast("Enter 0 or a positive number") return end
+		adminRemote:FireServer("water_set_countdown",v); showFeedback("Countdown -> "..v.."s")
 	end)
 end
 
