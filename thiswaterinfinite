@@ -6,7 +6,7 @@ local RunService = game:GetService("RunService")
 local Players    = game:GetService("Players")
 
 -- ====== CONFIGURATION ======
-local WATER_Y          = -9.282   -- Y position of the water surface (studs)
+local WATER_Y          = -25.693  -- Y position of the water surface (studs)
 local CHUNK_SIZE       = 1024     -- studs per chunk side (power of 2 recommended)
 local RENDER_DISTANCE  = 4        -- chunks loaded in each direction from a player
 local UNLOAD_BUFFER    = 2        -- extra chunks beyond render distance before unloading
@@ -42,7 +42,7 @@ local function createChunk(cx, cz)
 		cz * CHUNK_SIZE + CHUNK_SIZE * 0.5
 	)
 	part.Anchored        = true
-	part.CanCollide      = true
+	part.CanCollide      = false
 	part.CastShadow      = false
 	part.Material        = Enum.Material.Water
 	part.Color           = WATER_COLOR
