@@ -53,6 +53,16 @@ local waterConfigs = {
 		startY = -19.121,
 		maxY   =  11.879,
 	},
+	{
+		name   = "Water7",
+		startY = -33.446,  -- 57 studs below maxY
+		maxY   =  23.554,
+	},
+	{
+		name   = "Water8",
+		startY = -35.534,  -- 61 studs below maxY
+		maxY   =  25.466,
+	},
 }
 -- ──────────────────────────────────────────────────────────────────────────────
 
