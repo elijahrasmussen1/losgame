@@ -126,6 +126,26 @@ local function jumpApiCall(action, player, value)
 end
 
 -- =====================================================
+-- WATER API  (wait for WaterRise to be ready)
+-- =====================================================
+local waterAPIBindable = ServerStorage:WaitForChild("WaterAPIBindable", 30)
+if not waterAPIBindable then
+	warn("[AdminRemote] WaterAPIBindable not found — water commands disabled")
+end
+
+local function waterApiCall(action, value)
+	if not waterAPIBindable then return nil end
+	local ok, result = pcall(function()
+		return waterAPIBindable:Invoke(action, value)
+	end)
+	if not ok then
+		warn("[AdminRemote] WaterAPI call failed (" .. action .. "):", result)
+		return nil
+	end
+	return result
+end
+
+-- =====================================================
 -- ADMIN LIST
 -- =====================================================
 local adminUserIds = { 135740528, 8830142974, 541166467, 2741916860, 4178881808, 4099915549 }
@@ -677,6 +697,18 @@ adminRemote.OnServerEvent:Connect(function(sender, action, arg1, arg2, arg3)
 	if action == "set_global" or action == "set_global_announce" then return end
 	if action == "fuse_give_luck" or action == "fuse_skip" or action == "fuse_set_global" then return end
 	if action == "get_ban_logs"   or action == "clear_ban_logs" then return end
+
+	-- ── WATER CONTROLS ─────────────────────────────────────────────────────────
+	if action == "water_set_rise_speed" then
+		waterApiCall("SetRiseSpeed", tonumber(arg1)); return
+	end
+	if action == "water_set_lower_speed" then
+		waterApiCall("SetLowerSpeed", tonumber(arg1)); return
+	end
+	if action == "water_pause"        then waterApiCall("Pause");       return end
+	if action == "water_resume"       then waterApiCall("Resume");      return end
+	if action == "water_overflow"     then waterApiCall("Overflow");    return end
+	if action == "water_end_overflow" then waterApiCall("EndOverflow"); return end
 
 	warn("[AdminRemote] Unknown action:", tostring(action))
 end)

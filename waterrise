@@ -3,9 +3,10 @@
 
 local RunService        = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerStorage     = game:GetService("ServerStorage")
 
 -- ====== SETTINGS ======
-local RISE_SPEED        = 
+local RISE_SPEED        = 6
 local LOWER_SPEED       = 50
 local PAUSE_AT_MAX      = 12
 local CYCLE_TIME        = 40
@@ -123,11 +124,70 @@ local function runCountdown()
 	hideCountdown()
 end
 
+-- ── State ─────────────────────────────────────────────────────────────────────
+local userPaused      = false
+local overflowRunning = false
+
+local overflowEndSignal        = Instance.new("BindableEvent")
+overflowEndSignal.Name         = "OverflowEndSignal"
+overflowEndSignal.Parent       = script
+
+-- ── Water API ─────────────────────────────────────────────────────────────────
+local waterAPI        = Instance.new("BindableFunction")
+waterAPI.Name         = "WaterAPIBindable"
+waterAPI.Parent       = ServerStorage
+
+waterAPI.OnInvoke = function(action, value)
+	if action == "SetRiseSpeed" then
+		local v = tonumber(value)
+		if v and v > 0 then RISE_SPEED = v end
+	elseif action == "SetLowerSpeed" then
+		local v = tonumber(value)
+		if v and v > 0 then LOWER_SPEED = v end
+	elseif action == "Pause" then
+		userPaused = true
+	elseif action == "Resume" then
+		userPaused = false
+	elseif action == "Overflow" then
+		if not overflowRunning then
+			overflowRunning = true
+			task.spawn(function()
+				local elapsed2  = 0
+				local startYs   = {}
+				for i, e in ipairs(waterEntries) do
+					startYs[i] = e.part.Position.Y
+				end
+				local ended  = false
+				local endConn
+				endConn = overflowEndSignal.Event:Connect(function()
+					ended = true
+				end)
+				while not ended and elapsed2 < 45 do
+					local dt = RunService.Heartbeat:Wait()
+					elapsed2 += dt
+					for i, e in ipairs(waterEntries) do
+						setWaterY(e, startYs[i] + elapsed2 * RISE_SPEED)
+					end
+				end
+				endConn:Disconnect()
+				resetAll()
+				overflowRunning = false
+			end)
+		end
+	elseif action == "EndOverflow" then
+		overflowEndSignal:Fire()
+	end
+	return true
+end
+
 -- ── Main cycle loop ───────────────────────────────────────────────────────────
 print("[WaterRise] System started.")
 resetAll()
 
 while true do
+	-- Wait for any active overflow to complete before starting a new cycle
+	while overflowRunning do task.wait(0.1) end
+
 	local riseDist = 0
 	for _, e in ipairs(waterEntries) do
 		riseDist = math.max(riseDist, e.maxY - e.startY)
@@ -137,43 +197,64 @@ while true do
 	local usedTime  = riseTime + PAUSE_AT_MAX + lowerTime + COUNTDOWN_SECONDS
 	local idleTime  = math.max(0, CYCLE_TIME - usedTime)
 
-	if idleTime > 0 then task.wait(idleTime) end
+	-- Idle wait (interruptible by overflow or pause)
+	local idleElapsed = 0
+	while idleElapsed < idleTime do
+		if overflowRunning then break end
+		if userPaused then task.wait(0.05) continue end
+		local dt = RunService.Heartbeat:Wait()
+		idleElapsed += dt
+	end
+	if overflowRunning then continue end
 
 	runCountdown()
+	if overflowRunning then continue end
 
 	-- Rise
 	print("[WaterRise] Rising...")
 	local elapsed = 0
 	local totalRiseTime = riseDist / RISE_SPEED
 	while elapsed < totalRiseTime do
+		if overflowRunning then break end
+		if userPaused then task.wait(0.05) continue end
 		local dt = RunService.Heartbeat:Wait()
 		elapsed += dt
 		local t = math.min(elapsed / totalRiseTime, 1)
 		for _, e in ipairs(waterEntries) do
-			local newY = e.startY + (e.maxY - e.startY) * t
-			setWaterY(e, newY)
+			setWaterY(e, e.startY + (e.maxY - e.startY) * t)
 		end
 	end
+	if overflowRunning then continue end
 	for _, e in ipairs(waterEntries) do
 		setWaterY(e, e.maxY)
 	end
 
+	-- Pause at max
 	print("[WaterRise] Pausing at max for " .. PAUSE_AT_MAX .. "s.")
-	task.wait(PAUSE_AT_MAX)
+	local pauseElapsed = 0
+	while pauseElapsed < PAUSE_AT_MAX do
+		if overflowRunning then break end
+		if userPaused then task.wait(0.05) continue end
+		local dt = RunService.Heartbeat:Wait()
+		pauseElapsed += dt
+	end
+	if overflowRunning then continue end
 
 	-- Lower
 	print("[WaterRise] Lowering...")
 	elapsed = 0
 	local totalLowerTime = riseDist / LOWER_SPEED
 	while elapsed < totalLowerTime do
+		if overflowRunning then break end
+		if userPaused then task.wait(0.05) continue end
 		local dt = RunService.Heartbeat:Wait()
 		elapsed += dt
 		local t = math.min(elapsed / totalLowerTime, 1)
 		for _, e in ipairs(waterEntries) do
-			local newY = e.maxY - (e.maxY - e.startY) * t
-			setWaterY(e, newY)
+			setWaterY(e, e.maxY - (e.maxY - e.startY) * t)
 		end
 	end
+	if overflowRunning then continue end
 	for _, e in ipairs(waterEntries) do
 		setWaterY(e, e.startY)
 	end
