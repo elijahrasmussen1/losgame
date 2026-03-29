@@ -88,6 +88,7 @@ for _, config in ipairs(waterConfigs) do
 		startY     = config.startY,
 		maxY       = config.maxY,
 		startSizeY = waterPart.Size.Y,
+		startMat   = waterPart.Material,
 	})
 
 	print(string.format("[WaterRise] Registered: %s  startY=%.3f  maxY=%.3f",
@@ -153,6 +154,27 @@ waterAPI.OnInvoke = function(action, value)
 	elseif action == "SetCountdown" then
 		local v = tonumber(value)
 		if v and v >= 0 then COUNTDOWN_SECONDS = math.floor(v) end
+	elseif action == "SetPauseAtMax" then
+		local v = tonumber(value)
+		if v and v >= 0 then PAUSE_AT_MAX = v end
+	elseif action == "ResetDefaults" then
+		RISE_SPEED        = 6
+		LOWER_SPEED       = 50
+		PAUSE_AT_MAX      = 12
+		CYCLE_TIME        = 40
+		COUNTDOWN_SECONDS = 5
+		userPaused        = false
+		if overflowRunning then overflowEndSignal:Fire() end
+		if nukeActive then
+			nukeActive = false
+			for _, e in ipairs(waterEntries) do
+				e.part.Transparency = 0
+				e.part.CanCollide   = true
+				e.part.CanTouch     = true
+				e.part.Material     = e.startMat
+			end
+			resetAll()
+		end
 	elseif action == "Pause" then
 		userPaused = true
 	elseif action == "Resume" then
@@ -175,7 +197,7 @@ waterAPI.OnInvoke = function(action, value)
 				endConn = overflowEndSignal.Event:Connect(function()
 					ended = true
 				end)
-				while not ended and elapsed2 < 45 do
+				while not ended do
 					local dt = RunService.Heartbeat:Wait()
 					elapsed2 += dt
 					for i, e in ipairs(waterEntries) do
@@ -198,17 +220,21 @@ waterAPI.OnInvoke = function(action, value)
 			overflowEndSignal:Fire()
 			task.spawn(function()
 				for _, e in ipairs(waterEntries) do
-					-- Spawn a Roblox explosion at the part's position
+					-- Large staggered explosion for dramatic effect
 					local exp = Instance.new("Explosion")
-					exp.Position           = e.part.Position
-					exp.BlastRadius        = 20
-					exp.BlastPressure      = 0          -- visual only, no physics push
-					exp.ExplosionType      = Enum.ExplosionType.NoCraters
+					exp.Position                  = e.part.Position
+					exp.BlastRadius               = 60
+					exp.BlastPressure             = 0
+					exp.ExplosionType             = Enum.ExplosionType.NoCraters
 					exp.DestroyJointRadiusPercent = 0
-					exp.Parent             = workspace
-					-- Hide the part
-					e.part.Transparency    = 1
-					e.part.CanCollide      = false
+					exp.Parent                    = workspace
+					-- Completely remove the water part from gameplay:
+					-- invisible, no collision, no touch events, no water material
+					e.part.Transparency = 1
+					e.part.CanCollide   = false
+					e.part.CanTouch     = false
+					e.part.Material     = Enum.Material.SmoothPlastic
+					task.wait(0.05) -- stagger for cascade effect
 				end
 			end)
 		end
@@ -219,6 +245,8 @@ waterAPI.OnInvoke = function(action, value)
 			for _, e in ipairs(waterEntries) do
 				e.part.Transparency = 0
 				e.part.CanCollide   = true
+				e.part.CanTouch     = true
+				e.part.Material     = e.startMat
 			end
 		end
 	end

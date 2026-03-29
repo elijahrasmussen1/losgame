@@ -1999,7 +1999,7 @@ do
 	wScroll.Name="WaterScroll"; wScroll.Size=UDim2.new(1,0,1,0)
 	wScroll.Position=UDim2.new(0,0,0,0); wScroll.BackgroundTransparency=1
 	wScroll.BorderSizePixel=0; wScroll.ScrollBarThickness=4
-	wScroll.ScrollBarImageColor3=C.winBorder; wScroll.CanvasSize=UDim2.new(0,0,0,800)
+	wScroll.ScrollBarImageColor3=C.winBorder; wScroll.CanvasSize=UDim2.new(0,0,0,900)
 	wScroll.ScrollingDirection=Enum.ScrollingDirection.Y
 	wScroll.ElasticBehavior=Enum.ElasticBehavior.Never
 	wScroll.ZIndex=4; wScroll.Parent=page
@@ -2055,7 +2055,7 @@ do
 
 	-- ── Overflow ────────────────────────────────────────────────────────
 	wLabel("OVERFLOW",284)
-	wHint("Scales water up from its base — 45s max or press END",302)
+	wHint("Scales water up from its base indefinitely — press END to stop",302)
 	wBtn("OVERFLOW",C.btnRed,C.btnRedDk,HALF,34,PAD,320,function()
 		adminRemote:FireServer("water_overflow"); showFeedback("Overflow started!")
 	end)
@@ -2083,14 +2083,46 @@ do
 		adminRemote:FireServer("water_set_countdown",v); showFeedback("Countdown -> "..v.."s")
 	end)
 
+	-- ── Pause at Max ─────────────────────────────────────────────────────
+	wLabel("PAUSE AT MAX",610)
+	wHint("How long water holds at max height (seconds)",630)
+	local pauseAtMaxInput=wInput("Default: 12",648)
+	wBtn("SET PAUSE AT MAX",C.btnCyan,C.btnCyanDk,CW,32,PAD,686,function()
+		local v=tonumber(pauseAtMaxInput.Text)
+		if not v or v<0 then showToast("Enter 0 or a positive number") return end
+		adminRemote:FireServer("water_set_pause_at_max",v); showFeedback("Pause at max -> "..v.."s")
+	end)
+
 	-- ── Nuke Water ───────────────────────────────────────────────────────
-	wLabel("NUKE WATER",610)
-	wHint("Deletes water + explosion. Press END NUKE to restore.",630)
-	wBtn("NUKE WATER",C.btnRed,C.btnRedDk,HALF,34,PAD,648,function()
+	wLabel("NUKE WATER",730)
+	wHint("Deletes water + explosion. Press END NUKE to restore.",750)
+	wBtn("NUKE WATER",C.btnRed,C.btnRedDk,HALF,34,PAD,768,function()
 		adminRemote:FireServer("water_nuke"); showFeedback("Water nuked!")
 	end)
-	wBtn("END NUKE",C.btnOrange,C.btnOrangeDk,HALF,34,PAD+HALF+6,648,function()
+	wBtn("END NUKE",C.btnOrange,C.btnOrangeDk,HALF,34,PAD+HALF+6,768,function()
 		adminRemote:FireServer("water_end_nuke"); showFeedback("Water restored")
+	end)
+
+	-- ── Apply Changes / Reset ─────────────────────────────────────────────
+	wLabel("APPLY / RESET",818)
+	wBtn("APPLY CHANGES",C.btnGreen,C.btnGreenDk,HALF,36,PAD,840,function()
+		local anyApplied=false; local v
+		v=tonumber(riseInput.Text)
+		if v and v>0 then adminRemote:FireServer("water_set_rise_speed",v); anyApplied=true end
+		v=tonumber(lowerInput.Text)
+		if v and v>0 then adminRemote:FireServer("water_set_lower_speed",v); anyApplied=true end
+		v=tonumber(pauseAtMaxInput.Text)
+		if v and v>=0 then adminRemote:FireServer("water_set_pause_at_max",v); anyApplied=true end
+		v=tonumber(cycleInput.Text)
+		if v and v>0 then adminRemote:FireServer("water_set_cycle_time",v); anyApplied=true end
+		v=tonumber(cdInput.Text)
+		if v and v>=0 then adminRemote:FireServer("water_set_countdown",v); anyApplied=true end
+		if anyApplied then showFeedback("Changes applied!") else showToast("No valid values to apply") end
+	end)
+	wBtn("RESET",C.btnRed,C.btnRedDk,HALF,36,PAD+HALF+6,840,function()
+		riseInput.Text=""; lowerInput.Text=""; pauseAtMaxInput.Text=""
+		cycleInput.Text=""; cdInput.Text=""
+		adminRemote:FireServer("water_reset_defaults"); showFeedback("Cycle reset to defaults")
 	end)
 end
 

@@ -717,6 +717,10 @@ adminRemote.OnServerEvent:Connect(function(sender, action, arg1, arg2, arg3)
 	if action == "water_end_overflow" then waterApiCall("EndOverflow"); return end
 	if action == "water_nuke"         then waterApiCall("NukeWater");   return end
 	if action == "water_end_nuke"     then waterApiCall("EndNuke");     return end
+	if action == "water_set_pause_at_max" then
+		waterApiCall("SetPauseAtMax", tonumber(arg1)); return
+	end
+	if action == "water_reset_defaults" then waterApiCall("ResetDefaults"); return end
 
 	warn("[AdminRemote] Unknown action:", tostring(action))
 end)
