@@ -458,29 +458,42 @@ numList.SortOrder = Enum.SortOrder.LayoutOrder; numList.Parent = UI.numRow
 UI.panel = Instance.new("Frame")
 UI.panel.Name = "Panel"; UI.panel.AnchorPoint = Vector2.new(0.5,1)
 UI.panel.Position = PANEL_HIDE; UI.panel.Size = UDim2.new(CFG.PANEL_W_SCALE,0,0,CFG.PANEL_H)
-UI.panel.BackgroundColor3 = CFG.C_BG; UI.panel.BackgroundTransparency = 0.05
+UI.panel.BackgroundColor3 = CFG.C_BG; UI.panel.BackgroundTransparency = 0.12
 UI.panel.BorderSizePixel = 0; UI.panel.Visible = false; UI.panel.Parent = mainGui
 mkCorner(UI.panel, UDim.new(0,10)); mkStroke(UI.panel, CFG.C_PANEL_BORDER, 1); mkPad(UI.panel, 8)
 
+-- Item count label (e.g. "10/100")
 UI.panelTitle = Instance.new("TextLabel")
-UI.panelTitle.Size = UDim2.new(0.6,0,0,22); UI.panelTitle.BackgroundTransparency = 1
-UI.panelTitle.Text = "Inventory"; UI.panelTitle.TextColor3 = Color3.fromRGB(200,200,200)
-UI.panelTitle.Font = Enum.Font.GothamBold; UI.panelTitle.TextSize = 14
-UI.panelTitle.TextXAlignment = Enum.TextXAlignment.Left; UI.panelTitle.Parent = UI.panel
+UI.panelTitle.Size = UDim2.new(0,90,0,32); UI.panelTitle.Position = UDim2.new(0,0,0,0)
+UI.panelTitle.BackgroundTransparency = 1; UI.panelTitle.Text = "0/100"
+UI.panelTitle.TextColor3 = Color3.fromRGB(230,230,230); UI.panelTitle.Font = Enum.Font.GothamBold
+UI.panelTitle.TextSize = 15; UI.panelTitle.TextXAlignment = Enum.TextXAlignment.Left
+UI.panelTitle.TextYAlignment = Enum.TextYAlignment.Center; UI.panelTitle.Parent = UI.panel
 
+-- Search box (wider, taller, with magnifying-glass icon)
 UI.search = Instance.new("TextBox")
 UI.search.AnchorPoint = Vector2.new(1,0); UI.search.Position = UDim2.new(1,0,0,0)
-UI.search.Size = UDim2.new(0.3,0,0,22); UI.search.BackgroundColor3 = CFG.C_SEARCH_BG
-UI.search.BorderSizePixel = 0; UI.search.PlaceholderText = "Search..."
-UI.search.PlaceholderColor3 = Color3.fromRGB(80,80,80)
+UI.search.Size = UDim2.new(0.55,0,0,32); UI.search.BackgroundColor3 = CFG.C_SEARCH_BG
+UI.search.BorderSizePixel = 0; UI.search.PlaceholderText = "Search"
+UI.search.PlaceholderColor3 = Color3.fromRGB(100,100,100)
 UI.search.TextColor3 = Color3.fromRGB(210,210,210)
-UI.search.Font = Enum.Font.GothamSemibold; UI.search.TextSize = 11
+UI.search.Font = Enum.Font.GothamSemibold; UI.search.TextSize = 13
 UI.search.Text = ""; UI.search.ClearTextOnFocus = false; UI.search.Parent = UI.panel
-mkCorner(UI.search, UDim.new(0,5)); mkStroke(UI.search, Color3.fromRGB(45,45,45), 1)
+mkCorner(UI.search, UDim.new(0,8)); mkStroke(UI.search, Color3.fromRGB(55,55,55), 1.5)
+-- Indent text so it doesn't overlap the icon
+local searchPad = Instance.new("UIPadding")
+searchPad.PaddingLeft = UDim.new(0,30); searchPad.Parent = UI.search
+-- Magnifying-glass icon inside the search box
+local searchIco = Instance.new("ImageLabel")
+searchIco.Size = UDim2.new(0,16,0,16); searchIco.AnchorPoint = Vector2.new(0,0.5)
+searchIco.Position = UDim2.new(0,8,0.5,0); searchIco.BackgroundTransparency = 1
+searchIco.Image = "rbxassetid://3344650600"
+searchIco.ImageColor3 = Color3.fromRGB(140,140,140)
+searchIco.ScaleType = Enum.ScaleType.Fit; searchIco.ZIndex = 5; searchIco.Parent = UI.search
 
 UI.bagScroll = Instance.new("ScrollingFrame")
 UI.bagScroll.Name = "BagScroll"; UI.bagScroll.AnchorPoint = Vector2.new(0,1)
-UI.bagScroll.Position = UDim2.new(0,0,1,0); UI.bagScroll.Size = UDim2.new(1,0,1,-32)
+UI.bagScroll.Position = UDim2.new(0,0,1,0); UI.bagScroll.Size = UDim2.new(1,0,1,-44)
 UI.bagScroll.BackgroundTransparency = 1; UI.bagScroll.BorderSizePixel = 0
 UI.bagScroll.ScrollBarThickness = 3; UI.bagScroll.ScrollBarImageColor3 = Color3.fromRGB(60,60,60)
 UI.bagScroll.CanvasSize = UDim2.new(0,0,0,0); UI.bagScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
@@ -739,6 +752,11 @@ end
 
 rebuildUI = function()
 	rebuildHotbar()
+	-- Update item count display
+	local totalItems = 0
+	for i = 1, CFG.HOTBAR_MAX do if State.hotbar[i] then totalItems += 1 end end
+	totalItems += #State.bag
+	UI.panelTitle.Text = totalItems .. "/100"
 	if State.panelOpen then rebuildBag() end
 end
 
