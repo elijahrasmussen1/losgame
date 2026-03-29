@@ -1,0 +1,167 @@
+-- ServerScriptService/WaterRise.server.lua
+-- made by elijxhraz
+
+local RunService        = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+-- ====== SETTINGS ======
+local RISE_SPEED        = 
+local LOWER_SPEED       = 50
+local PAUSE_AT_MAX      = 12
+local CYCLE_TIME        = 40
+local COUNTDOWN_SECONDS = 5
+-- ======================
+
+local countdownEvent = Instance.new("RemoteEvent")
+countdownEvent.Name   = "WaterCountdownEvent"
+countdownEvent.Parent = ReplicatedStorage
+
+-- NEW: dedicated event so client can play the "1" sound cleanly
+local waterAlertEvent = Instance.new("RemoteEvent")
+waterAlertEvent.Name   = "WaterAlertEvent"
+waterAlertEvent.Parent = ReplicatedStorage
+
+-- ── Water config ──────────────────────────────────────────────────────────────
+local waterConfigs = {
+	{
+		name   = "Water",
+		startY = -9.282,
+		maxY   = -1.082,
+	},
+	{
+		name   = "Water2",
+		startY = -12.556,
+		maxY   = -4.356,
+	},
+	{
+		name   = "Water3",
+		startY = -9.867,
+		maxY   = -1.167,
+	},
+	{
+		name   = "Water4",
+		startY = -9.867,
+		maxY   = -1.167,
+	},
+	{
+		name   = "Water5",
+		startY = -16.082,
+		maxY   =  6.918,
+	},
+	{
+		name   = "Water6",
+		startY = -19.121,
+		maxY   =  11.879,
+	},
+}
+-- ──────────────────────────────────────────────────────────────────────────────
+
+local waterEntries = {}
+
+for _, config in ipairs(waterConfigs) do
+	local waterPart = workspace:WaitForChild(config.name, 10)
+	if not waterPart then
+		warn("[WaterRise] Missing part: " .. config.name)
+		continue
+	end
+
+	waterPart.Anchored = true
+
+	table.insert(waterEntries, {
+		part   = waterPart,
+		startY = config.startY,
+		maxY   = config.maxY,
+	})
+
+	print(string.format("[WaterRise] Registered: %s  startY=%.3f  maxY=%.3f",
+		config.name, config.startY, config.maxY))
+end
+
+-- ── Helpers ───────────────────────────────────────────────────────────────────
+local function setWaterY(entry, y)
+	entry.part.Position = Vector3.new(entry.part.Position.X, y, entry.part.Position.Z)
+end
+
+local function resetAll()
+	for _, e in ipairs(waterEntries) do
+		setWaterY(e, e.startY)
+	end
+end
+
+local function showCountdown(number)
+	countdownEvent:FireAllClients("show", number)
+end
+
+local function hideCountdown()
+	countdownEvent:FireAllClients("hide")
+end
+
+local function runCountdown()
+	for i = COUNTDOWN_SECONDS, 1, -1 do
+		showCountdown(i)
+		-- Fire the alert sound event when countdown reaches 1
+		if i == 1 then
+			waterAlertEvent:FireAllClients()
+		end
+		task.wait(1)
+	end
+	hideCountdown()
+end
+
+-- ── Main cycle loop ───────────────────────────────────────────────────────────
+print("[WaterRise] System started.")
+resetAll()
+
+while true do
+	local riseDist = 0
+	for _, e in ipairs(waterEntries) do
+		riseDist = math.max(riseDist, e.maxY - e.startY)
+	end
+	local riseTime  = riseDist / RISE_SPEED
+	local lowerTime = riseDist / LOWER_SPEED
+	local usedTime  = riseTime + PAUSE_AT_MAX + lowerTime + COUNTDOWN_SECONDS
+	local idleTime  = math.max(0, CYCLE_TIME - usedTime)
+
+	if idleTime > 0 then task.wait(idleTime) end
+
+	runCountdown()
+
+	-- Rise
+	print("[WaterRise] Rising...")
+	local elapsed = 0
+	local totalRiseTime = riseDist / RISE_SPEED
+	while elapsed < totalRiseTime do
+		local dt = RunService.Heartbeat:Wait()
+		elapsed += dt
+		local t = math.min(elapsed / totalRiseTime, 1)
+		for _, e in ipairs(waterEntries) do
+			local newY = e.startY + (e.maxY - e.startY) * t
+			setWaterY(e, newY)
+		end
+	end
+	for _, e in ipairs(waterEntries) do
+		setWaterY(e, e.maxY)
+	end
+
+	print("[WaterRise] Pausing at max for " .. PAUSE_AT_MAX .. "s.")
+	task.wait(PAUSE_AT_MAX)
+
+	-- Lower
+	print("[WaterRise] Lowering...")
+	elapsed = 0
+	local totalLowerTime = riseDist / LOWER_SPEED
+	while elapsed < totalLowerTime do
+		local dt = RunService.Heartbeat:Wait()
+		elapsed += dt
+		local t = math.min(elapsed / totalLowerTime, 1)
+		for _, e in ipairs(waterEntries) do
+			local newY = e.maxY - (e.maxY - e.startY) * t
+			setWaterY(e, newY)
+		end
+	end
+	for _, e in ipairs(waterEntries) do
+		setWaterY(e, e.startY)
+	end
+
+	print("[WaterRise] Cycle complete.")
+end
