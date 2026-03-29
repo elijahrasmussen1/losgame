@@ -1,0 +1,373 @@
+-- ServerScriptService/BackpackServer.server.lua
+-- made by elijxhraz
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players           = game:GetService("Players")
+
+local remotes = Instance.new("Folder")
+remotes.Name   = "BackpackRemotes"
+remotes.Parent = ReplicatedStorage
+
+local equipRemote       = Instance.new("RemoteEvent")
+equipRemote.Name        = "EquipItem"
+equipRemote.Parent      = remotes
+
+local unequipRemote     = Instance.new("RemoteEvent")
+unequipRemote.Name      = "UnequipItem"
+unequipRemote.Parent    = remotes
+
+local syncRemote        = Instance.new("RemoteEvent")
+syncRemote.Name         = "SyncBackpack"
+syncRemote.Parent       = remotes
+
+local brainrotCollected = Instance.new("RemoteEvent")
+brainrotCollected.Name  = "BrainrotCollected"
+brainrotCollected.Parent = remotes
+
+local stopCarryRemote   = Instance.new("RemoteEvent")
+stopCarryRemote.Name    = "StopCarryFromServer"
+stopCarryRemote.Parent  = remotes
+
+local setCarryingRemote = Instance.new("RemoteEvent")
+setCarryingRemote.Name  = "SetCarrying"
+setCarryingRemote.Parent = remotes
+
+print("[BackpackServer] Remotes created")
+
+local playerData       = {}
+local carryingBrainrot = {}
+local collectDebounce  = {}
+
+--------------------------------------------------------
+-- LOGICAL AUTO-GRANT OF BackpackGlove ON JOIN
+--------------------------------------------------------
+local function ensureBackpackGloveInInventory(player)
+	local data = playerData[player] or {}
+	local GLOVE_NAME = "BackpackGlove"
+	-- Check if already present (hotbar or items)
+	for i = 1, 10 do
+		local itm = data.hotbar and data.hotbar[i]
+		if itm and (itm.name == GLOVE_NAME or itm.modelName == GLOVE_NAME) then
+			print("[BackpackServer] BackpackGlove: already present in hotbar for", player.Name)
+			return
+		end
+	end
+	if data.items then
+		for _, item in ipairs(data.items) do
+			if item.name == GLOVE_NAME or item.modelName == GLOVE_NAME then
+				print("[BackpackServer] BackpackGlove: already present in bag/items for", player.Name)
+				return
+			end
+		end
+	end
+
+	-- Find the Tool in ReplicatedStorage for attributes
+	local tool = ReplicatedStorage:FindFirstChild(GLOVE_NAME)
+	if not tool or not tool:IsA("Tool") then
+		warn("[BackpackServer] BackpackGlove Tool not found in ReplicatedStorage!")
+		return
+	end
+	-- Build the item entry as your system expects
+	local icon = tool:GetAttribute("Icon") or ""
+	local itemEntry = {
+		name = GLOVE_NAME,
+		icon = icon,
+		modelName = GLOVE_NAME,
+		level = 1
+	}
+	if not data.hotbar then data.hotbar = {} end
+	if not data.items then data.items = {} end
+	-- Add to first free hotbar slot if possible
+	for i = 1, 10 do
+		if not data.hotbar[i] then
+			data.hotbar[i] = itemEntry
+			table.insert(data.items, itemEntry)
+			print("[BackpackServer] BackpackGlove auto-added to hotbar slot", i, "for", player.Name)
+			return
+		end
+	end
+	-- Otherwise, add to items (the bag)
+	table.insert(data.items, itemEntry)
+	print("[BackpackServer] BackpackGlove auto-added to bag for", player.Name)
+end
+
+local function getPlayerData(player)
+	if not playerData[player] then
+		playerData[player] = { items = {}, equipped = nil, hotbar = {} }
+	end
+	return playerData[player]
+end
+
+local function syncToClient(player)
+	syncRemote:FireClient(player, getPlayerData(player))
+end
+
+local function nextFreeSlot(data)
+	for i = 1, 10 do
+		if not data.hotbar[i] then return i end
+	end
+	return nil
+end
+
+local function getRoot(model)
+	return model:FindFirstChild("Root", true)
+		or model.PrimaryPart
+		or model:FindFirstChildWhichIsA("MeshPart", true)
+		or model:FindFirstChildWhichIsA("BasePart", true)
+end
+
+local function removeCarryWelds(model)
+	for _, d in ipairs(model:GetDescendants()) do
+		if d.Name == "CarryWeld" then d:Destroy() end
+	end
+end
+
+-- Gets the full height of the model from its bounding box
+local function getModelHalfHeight(model)
+	local cf, size = model:GetBoundingBox()
+	return size.Y / 2
+end
+
+local function getGroundY(position, model)
+	local raycastParams = RaycastParams.new()
+	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+
+	local excludeList = { model }
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p.Character then
+			table.insert(excludeList, p.Character)
+		end
+	end
+	raycastParams.FilterDescendantsInstances = excludeList
+
+	local origin    = Vector3.new(position.X, position.Y + 10, position.Z)
+	local direction = Vector3.new(0, -500, 0)
+	local result    = workspace:Raycast(origin, direction, raycastParams)
+
+	if result then
+		return result.Position.Y
+	end
+
+	-- Fallback: nearest Baseplate
+	local best     = nil
+	local bestDist = math.huge
+	for _, obj in ipairs(workspace:GetDescendants()) do
+		if obj.Name == "Baseplate" and obj:IsA("BasePart") then
+			local dist = (Vector3.new(obj.Position.X, 0, obj.Position.Z) - Vector3.new(position.X, 0, position.Z)).Magnitude
+			if dist < bestDist then
+				bestDist = dist
+				best     = obj
+			end
+		end
+	end
+
+	if best then
+		return best.Position.Y + best.Size.Y / 2
+	end
+
+	return position.Y
+end
+
+local function dropModel(model, referencePosition)
+	if not model or not model.Parent then return end
+
+	local root = getRoot(model)
+	if not root then return end
+
+	-- 1. Anchor everything FIRST before removing welds
+	--    so parts don't fall during the weld removal frame
+	for _, p in ipairs(model:GetDescendants()) do
+		if p:IsA("BasePart") then
+			p.Anchored   = true
+			p.CanCollide = false
+			pcall(function() p:SetNetworkOwner(nil) end)
+		end
+	end
+
+	-- 2. Now safely remove welds
+	removeCarryWelds(model)
+
+	-- 3. Wait for engine to process
+	task.wait(0.1)
+
+	if not model or not model.Parent then return end
+
+	-- 4. Raycast from reference position downward for ground
+	local groundY      = getGroundY(referencePosition, model)
+	local halfHeight   = getModelHalfHeight(model)
+	local finalPos     = Vector3.new(referencePosition.X, groundY + halfHeight + 0.05, referencePosition.Z)
+
+	-- 5. Move entire model using PivotTo so all parts move together correctly
+	if model.PrimaryPart then
+		model:PivotTo(CFrame.new(finalPos))
+	else
+		root.CFrame = CFrame.new(finalPos)
+	end
+
+	-- 6. Re-anchor after move to lock in position
+	for _, p in ipairs(model:GetDescendants()) do
+		if p:IsA("BasePart") then
+			p.Anchored   = true
+			p.CanCollide = false
+		end
+	end
+
+	print("[BackpackServer] Dropped", model.Name, "at", finalPos)
+end
+
+-- ── SetCarrying ───────────────────────────────────────────────────────────────
+setCarryingRemote.OnServerEvent:Connect(function(player, model)
+	if model and model:IsA("Model") then
+		carryingBrainrot[player] = model
+
+		local root = getRoot(model)
+
+		for _, p in ipairs(model:GetDescendants()) do
+			if p:IsA("BasePart") then
+				p.Anchored   = false
+				p.CanCollide = false
+			end
+		end
+
+		if root then
+			for _, p in ipairs(model:GetDescendants()) do
+				if p:IsA("BasePart") and p ~= root then
+					if not p:FindFirstChild("CarryWeld") then
+						local w  = Instance.new("WeldConstraint")
+						w.Name   = "CarryWeld"
+						w.Part0  = root
+						w.Part1  = p
+						w.Parent = p
+					end
+				end
+			end
+			pcall(function() root:SetNetworkOwner(player) end)
+		end
+
+		print("[BackpackServer]", player.Name, "is carrying:", model.Name)
+	else
+		local prev = carryingBrainrot[player]
+		carryingBrainrot[player] = nil
+		if prev and prev.Parent then
+			local character = player.Character
+			local hrp       = character and character:FindFirstChild("HumanoidRootPart")
+			local dropPos   = hrp and (hrp.CFrame * CFrame.new(0, 0, -3.5)).Position or Vector3.new(0, 5, 0)
+			task.spawn(function()
+				dropModel(prev, dropPos)
+			end)
+		end
+	end
+end)
+
+-- ── Handle player death while carrying ───────────────────────────────────────
+Players.PlayerAdded:Connect(function(player)
+	local data = getPlayerData(player)
+	ensureBackpackGloveInInventory(player)
+
+	player.CharacterAdded:Connect(function(character)
+		local humanoid = character:WaitForChild("Humanoid")
+		humanoid.Died:Connect(function()
+			local model = carryingBrainrot[player]
+			if model and model.Parent then
+				local hrp    = character:FindFirstChild("HumanoidRootPart")
+				local refPos = hrp and hrp.Position or Vector3.new(0, 5, 0)
+				carryingBrainrot[player] = nil
+				stopCarryRemote:FireClient(player)
+				task.spawn(function()
+					dropModel(model, refPos)
+				end)
+			end
+		end)
+
+		task.wait(1)
+		syncToClient(player)
+	end)
+end)
+
+-- ── StartArea touch → collect ─────────────────────────────────────────────────
+local StartArea = workspace:WaitForChild("StartArea", 20)
+if StartArea then
+	print("[BackpackServer] StartArea found:", StartArea.ClassName)
+
+	local function onTouched(hit)
+		local character = hit.Parent
+		if not character then return end
+		local player = Players:GetPlayerFromCharacter(character)
+		if not player or collectDebounce[player] then return end
+
+		local model = carryingBrainrot[player]
+		if not model or not model.Parent then return end
+
+		collectDebounce[player] = true
+
+		local data = getPlayerData(player)
+		local slot = nextFreeSlot(data)
+
+		if slot then
+			local itemRecord = {
+				name      = model.Name,
+				icon      = model:GetAttribute("Icon") or "",
+				modelName = model.Name,
+			}
+			data.hotbar[slot] = itemRecord
+			table.insert(data.items, itemRecord)
+
+			stopCarryRemote:FireClient(player)
+			brainrotCollected:FireClient(player, slot, itemRecord)
+			model:Destroy()
+			carryingBrainrot[player] = nil
+			syncToClient(player)
+			print("[BackpackServer]", player.Name, "collected", itemRecord.name, "into slot", slot)
+		else
+			warn("[BackpackServer]", player.Name, "hotbar is full!")
+		end
+
+		task.wait(1)
+		collectDebounce[player] = nil
+	end
+
+	if StartArea:IsA("BasePart") then
+		StartArea.Touched:Connect(onTouched)
+	else
+		for _, part in ipairs(StartArea:GetDescendants()) do
+			if part:IsA("BasePart") then part.Touched:Connect(onTouched) end
+		end
+		StartArea.DescendantAdded:Connect(function(part)
+			if part:IsA("BasePart") then part.Touched:Connect(onTouched) end
+		end)
+	end
+else
+	warn("[BackpackServer] StartArea not found!")
+end
+
+-- ── Equip / Unequip ───────────────────────────────────────────────────────────
+equipRemote.OnServerEvent:Connect(function(player, slotIndex)
+	local data = getPlayerData(player)
+	if data.hotbar[slotIndex] then
+		data.equipped = slotIndex
+		syncToClient(player)
+	end
+end)
+
+unequipRemote.OnServerEvent:Connect(function(player)
+	local data = getPlayerData(player)
+	data.equipped = nil
+	syncToClient(player)
+end)
+
+-- ── Cleanup ───────────────────────────────────────────────────────────────────
+Players.PlayerRemoving:Connect(function(player)
+	local model = carryingBrainrot[player]
+	if model and model.Parent then
+		local root = getRoot(model)
+		local refPos = root and root.Position or Vector3.new(0, 5, 0)
+		task.spawn(function()
+			dropModel(model, refPos)
+		end)
+	end
+	playerData[player]       = nil
+	carryingBrainrot[player] = nil
+	collectDebounce[player]  = nil
+end)
+
+print("[BackpackServer] Ready")
