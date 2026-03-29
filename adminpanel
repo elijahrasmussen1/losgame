@@ -2028,7 +2028,7 @@ do
 
 	-- ── Rise Speed ──────────────────────────────────────────────────────
 	wLabel("RISE SPEED",8)
-	local riseInput=wInput("Default: 6",30)
+	local riseInput=wInput("Default: 20",30)
 	wBtn("SET RISE SPEED",C.btnCyan,C.btnCyanDk,CW,32,PAD,68,function()
 		local v=tonumber(riseInput.Text)
 		if not v or v<=0 then showToast("Enter a positive number") return end
