@@ -1,0 +1,245 @@
+-- StarterPlayerScripts/Carry2
+-- made by elijxhraz
+
+local Players           = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService        = game:GetService("RunService")
+local Debris            = game:GetService("Debris")
+
+local player    = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local hrp       = character:WaitForChild("HumanoidRootPart")
+
+player.CharacterAdded:Connect(function(c)
+	character = c
+	hrp = c:WaitForChild("HumanoidRootPart")
+end)
+
+local carryEvent      = ReplicatedStorage:WaitForChild("CarryEvent")
+local remotes         = ReplicatedStorage:WaitForChild("BackpackRemotes")
+local stopCarryRemote = remotes:WaitForChild("StopCarryFromServer")
+local setCarrying     = remotes:WaitForChild("SetCarrying")
+
+print("[Carry2] Remotes ready")
+
+local carrying     = false
+local carriedModel = nil
+local carryConn    = nil
+local activePrompt = nil
+
+local CARRIABLE = {
+	["NoobiniCakenini"] = true,
+	["Allesina"]        = true,
+}
+
+-- ── Pickup sounds per carriable name ─────────────────────────────────────────
+local CARRY_SOUNDS = {
+	["NoobiniCakenini"] = "rbxassetid://88464131628190",
+	["Allesina"]        = "rbxassetid://89142962655691",
+}
+
+local function playCarrySound(modelName)
+	local soundId = CARRY_SOUNDS[modelName]
+	if not soundId then return end
+	local sound = Instance.new("Sound")
+	sound.SoundId            = soundId
+	sound.Volume             = 1
+	sound.RollOffMaxDistance = 0
+	sound.Parent             = workspace
+	sound:Play()
+	Debris:AddItem(sound, 10)
+end
+
+-- ── Drop Button ───────────────────────────────────────────────────────────────
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name           = "CarryGui"
+screenGui.ResetOnSpawn   = false
+screenGui.IgnoreGuiInset = true
+screenGui.Parent         = player.PlayerGui
+
+local frame = Instance.new("Frame")
+frame.Size             = UDim2.new(0, 200, 0, 60)
+frame.Position         = UDim2.new(0.5, -100, 0.83, 0)
+frame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+frame.BorderSizePixel  = 0
+frame.Visible          = false
+frame.Parent           = screenGui
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 14)
+
+local dropButton = Instance.new("TextButton")
+dropButton.Size                   = UDim2.new(1, 0, 1, 0)
+dropButton.BackgroundTransparency = 1
+dropButton.TextColor3             = Color3.fromRGB(255, 255, 255)
+dropButton.Text                   = "DROP"
+dropButton.TextSize               = 20
+dropButton.Font                   = Enum.Font.GothamBold
+dropButton.BorderSizePixel        = 0
+dropButton.Parent                 = frame
+
+-- ── Get best moveable part ────────────────────────────────────────────────────
+local function getRoot(model)
+	return model:FindFirstChild("Root", true)
+		or model.PrimaryPart
+		or model:FindFirstChildWhichIsA("MeshPart", true)
+		or model:FindFirstChildWhichIsA("BasePart", true)
+end
+
+-- ── Stop carry ────────────────────────────────────────────────────────────────
+local function stopCarry(fromServer)
+	if not carrying then return end
+	carrying = false
+	frame.Visible = false
+
+	if carryConn then carryConn:Disconnect(); carryConn = nil end
+
+	if activePrompt then
+		activePrompt.Enabled = true
+		activePrompt = nil
+	end
+
+	setCarrying:FireServer(nil)
+	carryEvent:FireServer("resume")
+
+	print("[Carry2] Stopped carry. fromServer=", fromServer)
+	carriedModel = nil
+end
+
+-- ── Start carry ───────────────────────────────────────────────────────────────
+local function startCarry(model, prompt)
+	if carrying then return end
+
+	local root = getRoot(model)
+	if not root then
+		warn("[Carry2] No moveable part on " .. model.Name)
+		return
+	end
+
+	carrying     = true
+	carriedModel = model
+	activePrompt = prompt
+	if prompt then prompt.Enabled = false end
+
+	-- Play pickup sound when carry starts
+	playCarrySound(model.Name)
+
+	carryConn = RunService.Heartbeat:Connect(function()
+		if not carrying or not model.Parent then stopCarry(false); return end
+		root.CFrame = hrp.CFrame * CFrame.new(0, -1, -3.5)
+	end)
+
+	frame.Visible = true
+	setCarrying:FireServer(model)
+	carryEvent:FireServer("pause")
+
+	print("[Carry2] Carrying " .. model.Name)
+end
+
+stopCarryRemote.OnClientEvent:Connect(function()
+	stopCarry(true)
+end)
+
+dropButton.MouseButton1Click:Connect(function()
+	stopCarry(false)
+end)
+
+-- ── Hook model ────────────────────────────────────────────────────────────────
+local hookedModels = {}
+
+local function hookModel(model)
+	if hookedModels[model] then return end
+	-- Never hook equipped display clones
+	if model:GetAttribute("EquippedDisplay") then return end
+	hookedModels[model] = true
+
+	model.AncestryChanged:Connect(function()
+		if not model.Parent then
+			hookedModels[model] = nil
+		end
+	end)
+
+	task.spawn(function()
+		local prompt = nil
+		for _, d in ipairs(model:GetDescendants()) do
+			if d:IsA("ProximityPrompt") then
+				prompt = d
+				break
+			end
+		end
+
+		if not prompt then
+			local found = false
+			local conn
+			conn = model.DescendantAdded:Connect(function(d)
+				if found then return end
+				if d:IsA("ProximityPrompt") then
+					found  = true
+					prompt = d
+					conn:Disconnect()
+				end
+			end)
+
+			local elapsed = 0
+			while not found and model.Parent and elapsed < 5 do
+				task.wait(0.1)
+				elapsed += 0.1
+			end
+			conn:Disconnect()
+
+			if not found then
+				warn("[Carry2] No ProximityPrompt found on " .. model.Name .. " after 5s")
+				return
+			end
+		end
+
+		print("[Carry2] ✅ Hooked " .. model.Name .. " → prompt: " .. prompt.Name)
+		prompt.Triggered:Connect(function(p)
+			if p == player then startCarry(model, prompt) end
+		end)
+	end)
+end
+
+-- ── Watch workspace ───────────────────────────────────────────────────────────
+local function checkInstance(child)
+	if child:GetAttribute("EquippedDisplay") then return end
+	if child:IsA("Model") and CARRIABLE[child.Name] then
+		hookModel(child)
+	end
+end
+
+for _, child in ipairs(workspace:GetChildren()) do
+	checkInstance(child)
+end
+workspace.ChildAdded:Connect(checkInstance)
+
+-- ── Watch Brainrots folder ────────────────────────────────────────────────────
+local function watchBrainrotsFolder(folder)
+	for _, child in ipairs(folder:GetChildren()) do
+		if not child:GetAttribute("EquippedDisplay") and child:IsA("Model") and CARRIABLE[child.Name] then
+			hookModel(child)
+		end
+	end
+	folder.ChildAdded:Connect(function(child)
+		if not child:GetAttribute("EquippedDisplay") and child:IsA("Model") and CARRIABLE[child.Name] then
+			hookModel(child)
+		end
+	end)
+	folder.DescendantAdded:Connect(function(d)
+		if not d:GetAttribute("EquippedDisplay") and d:IsA("Model") and CARRIABLE[d.Name] then
+			hookModel(d)
+		end
+	end)
+end
+
+local BrainrotsFolder = workspace:FindFirstChild("Brainrots")
+if BrainrotsFolder then
+	watchBrainrotsFolder(BrainrotsFolder)
+end
+
+-- In case Brainrots folder hasn't loaded yet
+workspace.ChildAdded:Connect(function(child)
+	if child.Name == "Brainrots" then
+		watchBrainrotsFolder(child)
+	end
+end)
+
+print("[Carry2] Ready")
