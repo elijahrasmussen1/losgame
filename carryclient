@@ -50,67 +50,11 @@ local function playCarrySound(modelName)
 	Debris:AddItem(sound, 10)
 end
 
--- ── Stop carry (forward-declared so createDropGui can reference it) ───────────
-local stopCarry
-
--- ── Drop Button ───────────────────────────────────────────────────────────────
+-- ── Drop GUI (created in StarterGui by developer) ────────────────────────────
 local dropGui    = nil
 local dropButton = nil
 
-local function createDropGui()
-	-- Reuse an existing one (e.g. from a previous character spawn)
-	local existing = player.PlayerGui:FindFirstChild("DropGUI")
-	if existing then
-		dropGui    = existing
-		dropButton = existing:FindFirstChild("DropButtonGUI")
-		if dropGui and dropButton then
-			dropGui.Enabled = false
-			dropButton.MouseButton1Click:Connect(function() stopCarry(false) end)
-			return
-		end
-		existing:Destroy()
-	end
-
-	local sg = Instance.new("ScreenGui")
-	sg.Name          = "DropGUI"
-	sg.ResetOnSpawn  = false
-	sg.Enabled       = false
-
-	local btn = Instance.new("TextButton")
-	btn.Name             = "DropButtonGUI"
-	btn.Size             = UDim2.new(0, 140, 0, 50)
-	btn.Position         = UDim2.new(0.5, -70, 0.82, 0)
-	btn.AnchorPoint      = Vector2.new(0, 0)
-	btn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-	btn.TextColor3       = Color3.new(1, 1, 1)
-	btn.Text             = "Drop"
-	btn.Font             = Enum.Font.GothamBold
-	btn.TextSize         = 20
-	btn.BorderSizePixel  = 0
-	btn.Parent           = sg
-
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 8)
-	corner.Parent       = btn
-
-	sg.Parent = player.PlayerGui
-
-	dropGui    = sg
-	dropButton = btn
-	dropButton.MouseButton1Click:Connect(function() stopCarry(false) end)
-	print("[Carry2] Created DropGUI dynamically")
-end
-
--- ── Get best moveable part ────────────────────────────────────────────────────
-local function getRoot(model)
-	return model:FindFirstChild("Root", true)
-		or model.PrimaryPart
-		or model:FindFirstChildWhichIsA("MeshPart", true)
-		or model:FindFirstChildWhichIsA("BasePart", true)
-end
-
--- ── Stop carry ────────────────────────────────────────────────────────────────
-stopCarry = function(fromServer)
+local function stopCarry(fromServer)
 	if not carrying then return end
 	carrying = false
 	if dropGui then dropGui.Enabled = false end
@@ -127,6 +71,14 @@ stopCarry = function(fromServer)
 
 	print("[Carry2] Stopped carry. fromServer=", fromServer)
 	carriedModel = nil
+end
+
+-- ── Get best moveable part ────────────────────────────────────────────────────
+local function getRoot(model)
+	return model:FindFirstChild("Root", true)
+		or model.PrimaryPart
+		or model:FindFirstChildWhichIsA("MeshPart", true)
+		or model:FindFirstChildWhichIsA("BasePart", true)
 end
 
 -- ── Start carry ───────────────────────────────────────────────────────────────
@@ -163,12 +115,16 @@ stopCarryRemote.OnClientEvent:Connect(function()
 	stopCarry(true)
 end)
 
-createDropGui()
-
--- Recreate drop GUI on character respawn
-player.CharacterAdded:Connect(function()
-	task.wait(0.5) -- let PlayerGui reset
-	createDropGui()
+-- ── Wait for developer-made DropGUI from StarterGui ───────────────────────────
+task.spawn(function()
+	local gui = player.PlayerGui:WaitForChild("DropGUI")
+	dropGui    = gui
+	dropButton = gui:WaitForChild("DropButtonGUI")
+	gui.Enabled = false
+	dropButton.MouseButton1Click:Connect(function() stopCarry(false) end)
+	print("[Carry2] DropGUI ready")
+	-- If carry already started before the GUI resolved, show it now
+	if carrying then gui.Enabled = true end
 end)
 
 -- ── Hook model ────────────────────────────────────────────────────────────────
