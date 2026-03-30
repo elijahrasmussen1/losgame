@@ -13,22 +13,37 @@ local UserInputService  = game:GetService("UserInputService")
 local player    = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
+print("[SlowModeClient] Starting up...")
+
 -- Wait for the RemoteEvent (created by the server script)
 local toggleRemote = ReplicatedStorage:WaitForChild("ToggleSlowMode", 30)
 if not toggleRemote then
-	warn("[SlowModeClient] ToggleSlowMode remote not found")
+	warn("[SlowModeClient] ERROR: ToggleSlowMode RemoteEvent not found in ReplicatedStorage after 30s")
 	return
 end
+print("[SlowModeClient] Found ToggleSlowMode remote")
 
 -- ── Wait for UI ───────────────────────────────────────────────────────────────
-local screenGui = playerGui:WaitForChild("REAL",        20)
-local frame     = screenGui:WaitForChild("SlowMode",    20)
-local button    = frame:WaitForChild("SlowModeButton",  20)
-
-if not button then
-	warn("[SlowModeClient] SlowModeButton not found")
+local screenGui = playerGui:WaitForChild("REAL", 20)
+if not screenGui then
+	warn("[SlowModeClient] ERROR: ScreenGui 'REAL' not found in PlayerGui after 20s")
 	return
 end
+print("[SlowModeClient] Found ScreenGui REAL")
+
+local frame = screenGui:WaitForChild("SlowMode", 20)
+if not frame then
+	warn("[SlowModeClient] ERROR: Frame 'SlowMode' not found inside REAL after 20s")
+	return
+end
+print("[SlowModeClient] Found Frame SlowMode")
+
+local button = frame:WaitForChild("SlowModeButton", 20)
+if not button then
+	warn("[SlowModeClient] ERROR: 'SlowModeButton' not found inside SlowMode after 20s")
+	return
+end
+print("[SlowModeClient] Found SlowModeButton")
 
 -- ── State ─────────────────────────────────────────────────────────────────────
 local slowModeOn  = false
@@ -39,6 +54,7 @@ local function setSlowMode(enable)
 	slowModeOn         = enable
 	button.ImageColor3 = enable and Color3.fromRGB(0, 255, 0) or normalColor
 	toggleRemote:FireServer(enable)
+	print("[SlowModeClient] SlowMode " .. (enable and "ON" or "OFF"))
 end
 
 -- Button click
@@ -46,7 +62,7 @@ button.MouseButton1Click:Connect(function()
 	setSlowMode(not slowModeOn)
 end)
 
--- T keybind
+-- T keybind (skips if chat or another UI element has focus)
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	if gameProcessed then return end
 	if input.KeyCode == Enum.KeyCode.T then
