@@ -117,12 +117,24 @@ stopCarryRemote.OnClientEvent:Connect(function()
 end)
 
 task.spawn(function()
-	dropGui    = player.PlayerGui:WaitForChild("DropGUI")
-	dropButton = dropGui:WaitForChild("DropButtonGUI")
+	local gui = player.PlayerGui:WaitForChild("DropGUI", 15)
+	if not gui then
+		warn("[Carry2] DropGUI not found in PlayerGui after 15s")
+		return
+	end
+	local btn = gui:WaitForChild("DropButtonGUI", 10)
+	if not btn then
+		warn("[Carry2] DropButtonGUI not found in DropGUI after 10s")
+		return
+	end
+	dropGui    = gui
+	dropButton = btn
 	dropGui.Enabled = false
 	dropButton.MouseButton1Click:Connect(function()
 		stopCarry(false)
 	end)
+	-- If carry already started before the GUI resolved, show it now
+	if carrying then dropGui.Enabled = true end
 end)
 
 -- ── Hook model ────────────────────────────────────────────────────────────────
