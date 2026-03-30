@@ -1,65 +1,57 @@
 -- SlowModeClient.client.lua
 -- Place in StarterPlayerScripts
 --
--- Connects to the SlowMode Frame inside ScreenGui "REAL".
--- Clicking SlowModeButton toggles slow mode:
---   ON  → button ImageColor3 = (0, 255, 0), fires ToggleSlowMode(true)  to server
---   OFF → button ImageColor3 restored,      fires ToggleSlowMode(false) to server
+-- Toggles slow mode via button click OR the T key.
+-- UI path: PlayerGui → ScreenGui "REAL" → Frame "SlowMode" → ImageButton "SlowModeButton"
+--   ON  → ImageColor3 = (0, 255, 0), fires ToggleSlowMode(true)  to server
+--   OFF → ImageColor3 restored,      fires ToggleSlowMode(false) to server
 
 local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService  = game:GetService("UserInputService")
 
 local player    = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
-local toggleRemote = ReplicatedStorage:WaitForChild("ToggleSlowMode")
-
--- ── Wait for UI ───────────────────────────────────────────────────────────────
-local screenGui  = playerGui:WaitForChild("REAL")
-local frame      = screenGui:WaitForChild("SlowMode")
-local button     = frame:FindFirstChild("SlowModeButton", true)
-
-if not button then
-	-- Fall back: wait for the button to appear
-	local found = false
-	local conn
-	conn = frame.DescendantAdded:Connect(function(d)
-		if d.Name == "SlowModeButton" then
-			found  = true
-			button = d
-			conn:Disconnect()
-		end
-	end)
-	local elapsed = 0
-	while not found and elapsed < 10 do
-		task.wait(0.1)
-		elapsed += 0.1
-	end
-	if conn then conn:Disconnect() end
+-- Wait for the RemoteEvent (created by the server script)
+local toggleRemote = ReplicatedStorage:WaitForChild("ToggleSlowMode", 30)
+if not toggleRemote then
+	warn("[SlowModeClient] ToggleSlowMode remote not found")
+	return
 end
 
+-- ── Wait for UI ───────────────────────────────────────────────────────────────
+local screenGui = playerGui:WaitForChild("REAL",        20)
+local frame     = screenGui:WaitForChild("SlowMode",    20)
+local button    = frame:WaitForChild("SlowModeButton",  20)
+
 if not button then
-	warn("[SlowModeClient] SlowModeButton not found inside SlowMode frame")
+	warn("[SlowModeClient] SlowModeButton not found")
 	return
 end
 
 -- ── State ─────────────────────────────────────────────────────────────────────
-local slowModeOn     = false
-local normalColor    = button.ImageColor3  -- remember the original colour
+local slowModeOn  = false
+local normalColor = button.ImageColor3
 
 -- ── Toggle ────────────────────────────────────────────────────────────────────
 local function setSlowMode(enable)
-	slowModeOn = enable
-	if enable then
-		button.ImageColor3 = Color3.fromRGB(0, 255, 0)
-	else
-		button.ImageColor3 = normalColor
-	end
+	slowModeOn         = enable
+	button.ImageColor3 = enable and Color3.fromRGB(0, 255, 0) or normalColor
 	toggleRemote:FireServer(enable)
 end
 
+-- Button click
 button.MouseButton1Click:Connect(function()
 	setSlowMode(not slowModeOn)
 end)
 
-print("[SlowModeClient] Ready")
+-- T keybind
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then return end
+	if input.KeyCode == Enum.KeyCode.T then
+		setSlowMode(not slowModeOn)
+	end
+end)
+
+print("[SlowModeClient] Ready — click SlowModeButton or press T to toggle")
