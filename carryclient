@@ -116,15 +116,46 @@ stopCarryRemote.OnClientEvent:Connect(function()
 end)
 
 -- ── Wait for developer-made DropGUI from StarterGui ───────────────────────────
-task.spawn(function()
+-- Re-runs on every character spawn in case DropGUI has ResetOnSpawn = true
+local function setupDropGui()
 	local gui = player.PlayerGui:WaitForChild("DropGUI")
-	dropGui    = gui
-	dropButton = gui:WaitForChild("DropButtonGUI")
+	dropGui = gui
+	-- Recursive search so DropButtonGUI is found even if nested inside a Frame
+	local btn = gui:FindFirstChild("DropButtonGUI", true)
+	if not btn then
+		-- Fall back to waiting for it to appear
+		local found = false
+		local conn
+		conn = gui.DescendantAdded:Connect(function(d)
+			if d.Name == "DropButtonGUI" then
+				found = true
+				btn = d
+				conn:Disconnect()
+			end
+		end)
+		local elapsed = 0
+		while not found and elapsed < 10 do
+			task.wait(0.1)
+			elapsed += 0.1
+		end
+		if conn then conn:Disconnect() end
+	end
+	dropButton = btn
 	gui.Enabled = false
-	dropButton.MouseButton1Click:Connect(function() stopCarry(false) end)
+	if dropButton then
+		dropButton.MouseButton1Click:Connect(function() stopCarry(false) end)
+	end
 	print("[Carry2] DropGUI ready")
 	-- If carry already started before the GUI resolved, show it now
 	if carrying then gui.Enabled = true end
+end
+
+task.spawn(setupDropGui)
+
+-- Re-acquire GUI reference on respawn (handles ResetOnSpawn = true)
+player.CharacterAdded:Connect(function()
+	task.wait(0.5) -- let PlayerGui reset and repopulate
+	task.spawn(setupDropGui)
 end)
 
 -- ── Hook model ────────────────────────────────────────────────────────────────
