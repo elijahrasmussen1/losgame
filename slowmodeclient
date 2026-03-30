@@ -24,12 +24,12 @@ end
 print("[SlowModeClient] Found ToggleSlowMode remote")
 
 -- ── Wait for UI ───────────────────────────────────────────────────────────────
-local screenGui = playerGui:WaitForChild("REAL", 20)
+local screenGui = playerGui:WaitForChild("SlowMode", 20)
 if not screenGui then
-	warn("[SlowModeClient] ERROR: ScreenGui 'REAL' not found in PlayerGui after 20s")
+	warn("[SlowModeClient] ERROR: ScreenGui 'SlowMode' not found in PlayerGui after 20s")
 	return
 end
-print("[SlowModeClient] Found ScreenGui REAL")
+print("[SlowModeClient] Found ScreenGui SlowMode")
 
 local frame = screenGui:WaitForChild("SlowMode", 20)
 if not frame then
