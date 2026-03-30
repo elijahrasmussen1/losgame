@@ -1,1 +1,115 @@
+-- SlowMode.server.lua
+-- Place in ServerScriptService
+--
+-- Listens for ToggleSlowMode RemoteEvent from clients.
+-- When slow mode is ON  → WalkSpeed = 16, JumpPower = 0  (jump disabled)
+-- When slow mode is OFF → restore WalkSpeed / JumpPower from SpeedSystem / JumpSystem
 
+local Players           = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerStorage     = game:GetService("ServerStorage")
+
+-- ── Remotes ───────────────────────────────────────────────────────────────────
+local function getOrCreate(parent, name, class)
+	local obj = parent:FindFirstChild(name)
+	if not obj then
+		obj        = Instance.new(class)
+		obj.Name   = name
+		obj.Parent = parent
+	end
+	return obj
+end
+
+local toggleRemote = getOrCreate(ReplicatedStorage, "ToggleSlowMode", "RemoteEvent")
+
+-- ── Bindable APIs (provided by SpeedSystem / JumpSystem) ─────────────────────
+-- We wait briefly so those systems have time to create their bindables.
+local speedAPI = ServerStorage:WaitForChild("SpeedAPIBindable",  10)
+local jumpAPI  = ServerStorage:WaitForChild("JumpAPIBindable",   10)
+
+-- ── State ─────────────────────────────────────────────────────────────────────
+local slowPlayers = {}  -- [userId] = true when slow mode is active
+
+-- ── Helpers ───────────────────────────────────────────────────────────────────
+local function applySlowMode(player)
+	local char = player.Character
+	local hum  = char and char:FindFirstChildOfClass("Humanoid")
+	if hum then
+		hum.WalkSpeed    = 16
+		hum.UseJumpPower = true
+		hum.JumpPower    = 0
+	end
+end
+
+local function restoreNormal(player)
+	-- Ask SpeedSystem for the player's current walk speed
+	local ws = 16
+	if speedAPI then
+		local ok, result = pcall(function()
+			return speedAPI:Invoke("GetLevel", player)
+		end)
+		if ok and type(result) == "number" then
+			local BASE_SPEED      = 16
+			local SPEED_PER_LEVEL = 2
+			ws = BASE_SPEED + result * SPEED_PER_LEVEL
+		end
+	end
+
+	-- Ask JumpSystem for the player's current jump power
+	local jp = 50
+	if jumpAPI then
+		local ok, result = pcall(function()
+			return jumpAPI:Invoke("GetLevel", player)
+		end)
+		if ok and type(result) == "number" then
+			local BASE_JUMP      = 50
+			local JUMP_PER_LEVEL = 10
+			jp = BASE_JUMP + result * JUMP_PER_LEVEL
+		end
+	end
+
+	local char = player.Character
+	local hum  = char and char:FindFirstChildOfClass("Humanoid")
+	if hum then
+		hum.WalkSpeed    = ws
+		hum.UseJumpPower = true
+		hum.JumpPower    = jp
+	end
+end
+
+-- Re-apply slow mode after respawn so it persists until explicitly toggled off
+local function onCharacterAdded(player)
+	player.CharacterAdded:Connect(function()
+		task.wait()  -- let Humanoid load
+		if slowPlayers[player.UserId] then
+			applySlowMode(player)
+		end
+	end)
+end
+
+Players.PlayerAdded:Connect(function(player)
+	onCharacterAdded(player)
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+	slowPlayers[player.UserId] = nil
+end)
+
+for _, player in ipairs(Players:GetPlayers()) do
+	onCharacterAdded(player)
+end
+
+-- ── Toggle handler ────────────────────────────────────────────────────────────
+toggleRemote.OnServerEvent:Connect(function(player, enable)
+	if enable then
+		slowPlayers[player.UserId] = true
+		applySlowMode(player)
+		warn("[SlowMode] ON  for " .. player.Name)
+	else
+		slowPlayers[player.UserId] = nil
+		restoreNormal(player)
+		warn("[SlowMode] OFF for " .. player.Name)
+	end
+end)
+
+warn("[SlowMode] Server ready")
