@@ -2,7 +2,7 @@
 -- Place in StarterPlayerScripts
 --
 -- Toggles slow mode via button click OR the T key.
--- UI path: PlayerGui → ScreenGui "REAL" → Frame "SlowMode" → ImageButton "SlowModeButton"
+-- UI path: PlayerGui → ScreenGui "REAL" → Frame "LeftButtons" → Frame "SlowMode" → ImageButton "SlowModeButton"
 --   ON  → ImageColor3 = (0, 255, 0), fires ToggleSlowMode(true)  to server
 --   OFF → ImageColor3 restored,      fires ToggleSlowMode(false) to server
 
@@ -24,16 +24,24 @@ end
 print("[SlowModeClient] Found ToggleSlowMode remote")
 
 -- ── Wait for UI ───────────────────────────────────────────────────────────────
-local screenGui = playerGui:WaitForChild("SlowMode", 20)
+-- Path: PlayerGui → ScreenGui "REAL" → Frame "LeftButtons" → Frame "SlowMode" → ImageButton "SlowModeButton"
+local screenGui = playerGui:WaitForChild("REAL", 20)
 if not screenGui then
-	warn("[SlowModeClient] ERROR: ScreenGui 'SlowMode' not found in PlayerGui after 20s")
+	warn("[SlowModeClient] ERROR: ScreenGui 'REAL' not found in PlayerGui after 20s")
 	return
 end
-print("[SlowModeClient] Found ScreenGui SlowMode")
+print("[SlowModeClient] Found ScreenGui REAL")
 
-local frame = screenGui:WaitForChild("SlowMode", 20)
+local leftButtons = screenGui:WaitForChild("LeftButtons", 20)
+if not leftButtons then
+	warn("[SlowModeClient] ERROR: Frame 'LeftButtons' not found inside REAL after 20s")
+	return
+end
+print("[SlowModeClient] Found Frame LeftButtons")
+
+local frame = leftButtons:WaitForChild("SlowMode", 20)
 if not frame then
-	warn("[SlowModeClient] ERROR: Frame 'SlowMode' not found inside REAL after 20s")
+	warn("[SlowModeClient] ERROR: Frame 'SlowMode' not found inside LeftButtons after 20s")
 	return
 end
 print("[SlowModeClient] Found Frame SlowMode")

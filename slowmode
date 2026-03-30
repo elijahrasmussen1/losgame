@@ -2,7 +2,7 @@
 -- Place in ServerScriptService
 --
 -- Listens for ToggleSlowMode RemoteEvent from clients.
--- When slow mode is ON  → WalkSpeed = 16, JumpPower = 0  (jump disabled)
+-- When slow mode is ON  → WalkSpeed = 16, JumpPower = 50 (default, not disabled)
 -- When slow mode is OFF → restore WalkSpeed / JumpPower from SpeedSystem / JumpSystem
 
 local Players           = game:GetService("Players")
@@ -37,7 +37,7 @@ local function applySlowMode(player)
 	if hum then
 		hum.WalkSpeed    = 16
 		hum.UseJumpPower = true
-		hum.JumpPower    = 0
+		hum.JumpPower    = 50
 	end
 end
 
