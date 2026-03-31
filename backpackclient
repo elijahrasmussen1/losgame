@@ -822,55 +822,31 @@ end)
 -- SYNC
 -- ══════════════════════════════════════════════════════════════════════
 syncRemote.OnClientEvent:Connect(function(data)
-	local isFirstSync = (next(State.hotbar) == nil) and (#State.bag == 0)
-	if isFirstSync then
-		State.equippedSlot = data.equipped; State.hotbar = {}; State.bag = {}
-		if data.hotbar then
-			for i = 1, CFG.HOTBAR_MAX do
-				if data.hotbar[i] then
-					local item = data.hotbar[i]
-					if not item.level then item.level = 1 end
-					resolveIcon(item); State.hotbar[i] = item
-				end
-			end
-		end
-		if data.bag then
-			for _, item in ipairs(data.bag) do
+	-- Always rebuild from authoritative server state so that items removed
+	-- server-side (e.g. on placement) are correctly cleared from the client.
+	local prevEquippedSlot = State.equippedSlot
+	State.equippedSlot = data.equipped
+	State.hotbar = {}
+	State.bag = {}
+	if data.hotbar then
+		for i = 1, CFG.HOTBAR_MAX do
+			if data.hotbar[i] then
+				local item = data.hotbar[i]
 				if not item.level then item.level = 1 end
-				resolveIcon(item); table.insert(State.bag, item)
+				resolveIcon(item); State.hotbar[i] = item
 			end
 		end
-	else
-		local serverCounts, serverItemsByKey = {}, {}
-		if data.hotbar then
-			for i = 1, CFG.HOTBAR_MAX do
-				if data.hotbar[i] then
-					local item = data.hotbar[i]
-					if not item.level then item.level = 1 end
-					resolveIcon(item)
-					local k = itemKey(item)
-					serverCounts[k] = (serverCounts[k] or 0) + 1; serverItemsByKey[k] = item
-				end
-			end
+	end
+	if data.bag then
+		for _, item in ipairs(data.bag) do
+			if not item.level then item.level = 1 end
+			resolveIcon(item); table.insert(State.bag, item)
 		end
-		if data.bag then
-			for _, item in ipairs(data.bag) do
-				if not item.level then item.level = 1 end
-				resolveIcon(item)
-				local k = itemKey(item)
-				serverCounts[k] = (serverCounts[k] or 0) + 1; serverItemsByKey[k] = item
-			end
-		end
-		local clientCounts = buildItemCounts()
-		for k, serverTotal in pairs(serverCounts) do
-			local diff = serverTotal - (clientCounts[k] or 0)
-			for _ = 1, diff do
-				local src = serverItemsByKey[k]
-				local newItem = {}; for field, val in pairs(src) do newItem[field] = val end
-				insertNewItem(newItem)
-			end
-		end
-		State.equippedSlot = data.equipped
+	end
+	-- If server cleared the equipped slot (e.g. after placement), detach the
+	-- equipped display model so it doesn't linger on the character.
+	if prevEquippedSlot and not data.equipped then
+		detachEquipped()
 	end
 	rebuildUI()
 end)

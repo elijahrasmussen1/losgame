@@ -186,14 +186,14 @@ end
 
 clone.Parent = workspace
 
--- Snap to attachment world CFrame
+-- Snap to attachment world CFrame.
+-- Model:PivotTo() works for all Models in modern Roblox regardless of
+-- whether PrimaryPart is set, so use it unconditionally for Models.
 local attachCF = attachment.WorldCFrame
-if clone.PrimaryPart then
+if clone:IsA("Model") then
 clone:PivotTo(attachCF)
-else
-local root = clone:FindFirstChildWhichIsA("MeshPart", true)
-or clone:FindFirstChildWhichIsA("BasePart", true)
-if root then root.CFrame = attachCF end
+elseif clone:IsA("BasePart") then
+clone.CFrame = attachCF
 end
 
 -- Record the placement and update the prompt
