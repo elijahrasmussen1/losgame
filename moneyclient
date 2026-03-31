@@ -1,0 +1,341 @@
+-- MoneyClient.client.lua
+-- StarterPlayerScripts
+
+local Players           = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService        = game:GetService("RunService")
+local TweenService      = game:GetService("TweenService")
+
+local player    = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- =====================================================
+-- CONFIGURATION
+-- =====================================================
+local CONFIG = {
+	GuiPath = {
+		ScreenGuiName = "REAL",
+		LabelPath     = "OurCash",
+	},
+	Prefix       = "$",
+	AnimDuration = 0.6,
+
+	Popup = {
+		Enabled      = true,
+		Count        = 10,
+		SpreadRadius = 120,
+		FloatHeight  = 90,
+		FadeDuration = 1.2,
+		Stagger      = 0.06,
+		FontSize     = 18,
+	},
+}
+
+-- =====================================================
+-- SUFFIX TABLE
+-- =====================================================
+local SUFFIXES = {
+	{ threshold = 1e63, suffix = "Vg" },
+	{ threshold = 1e60, suffix = "ND" },
+	{ threshold = 1e57, suffix = "OD" },
+	{ threshold = 1e54, suffix = "SD" },
+	{ threshold = 1e51, suffix = "sD" },
+	{ threshold = 1e48, suffix = "QD" },
+	{ threshold = 1e45, suffix = "qD" },
+	{ threshold = 1e42, suffix = "TD" },
+	{ threshold = 1e39, suffix = "DD" },
+	{ threshold = 1e36, suffix = "UD" },
+	{ threshold = 1e33, suffix = "Dc" },
+	{ threshold = 1e30, suffix = "No" },
+	{ threshold = 1e27, suffix = "Oc" },
+	{ threshold = 1e24, suffix = "Sp" },
+	{ threshold = 1e21, suffix = "Sx" },
+	{ threshold = 1e18, suffix = "Qi" },
+	{ threshold = 1e15, suffix = "Qa" },
+	{ threshold = 1e12, suffix = "T"  },
+	{ threshold = 1e9,  suffix = "B"  },
+	{ threshold = 1e6,  suffix = "M"  },
+	{ threshold = 1e3,  suffix = "K"  },
+}
+
+local function formatCash(n)
+	if n == nil then n = 0 end
+	n = math.max(0, n)
+	for _, entry in ipairs(SUFFIXES) do
+		if n >= entry.threshold then
+			local formatted = string.format("%.2f", n / entry.threshold)
+			formatted = formatted:gsub("%.?0+$", "")
+			return CONFIG.Prefix .. formatted .. entry.suffix
+		end
+	end
+	local s      = tostring(math.floor(n))
+	local result = ""
+	local len    = #s
+	for i = 1, len do
+		if i > 1 and (len - i + 1) % 3 == 0 then result = result .. "," end
+		result = result .. s:sub(i, i)
+	end
+	return CONFIG.Prefix .. result
+end
+
+-- =====================================================
+-- FIND LABEL
+-- Always re-resolves from scratch — never trusts a
+-- cached reference that may point to a destroyed object
+-- =====================================================
+local cashLabel = nil
+
+local function resolvePath(parent, pathStr)
+	local obj = parent
+	for part in pathStr:gmatch("[^%.]+") do
+		obj = obj:FindFirstChild(part)
+		if not obj then return nil end
+	end
+	return obj
+end
+
+-- Resolves the label right now — returns it or nil
+local function findCashLabel()
+	local gui = playerGui:FindFirstChild(CONFIG.GuiPath.ScreenGuiName)
+	if not gui then return nil end
+	return resolvePath(gui, CONFIG.GuiPath.LabelPath)
+end
+
+-- Refreshes the cashLabel variable — re-finds it if
+-- the old reference is destroyed or nil
+local function refreshLabel()
+	-- If current reference is still valid, keep it
+	if cashLabel and cashLabel.Parent then return true end
+	-- Otherwise search for it
+	cashLabel = nil
+	for _ = 1, 40 do
+		cashLabel = findCashLabel()
+		if cashLabel then
+			print("[MoneyClient] Label resolved: " .. cashLabel:GetFullName())
+			return true
+		end
+		task.wait(0.25)
+	end
+	warn("[MoneyClient] Could not find OurCash after 10s")
+	return false
+end
+
+-- =====================================================
+-- SMOOTH COUNT ANIMATION
+-- =====================================================
+local displayedCash = 0
+local animConn      = nil
+
+local function cancelAnim()
+	if animConn then
+		animConn:Disconnect()
+		animConn = nil
+	end
+end
+
+local function setImmediate(amount)
+	cancelAnim()
+	displayedCash = amount
+	if cashLabel and cashLabel.Parent then
+		cashLabel.Text = formatCash(amount)
+	end
+end
+
+local function animateTo(targetAmount)
+	if not cashLabel or not cashLabel.Parent then return end
+
+	if math.abs(targetAmount - displayedCash) < 1 then
+		setImmediate(targetAmount)
+		return
+	end
+
+	cancelAnim()
+
+	local startAmount = displayedCash
+	local diff        = targetAmount - startAmount
+	local startTime   = tick()
+	local duration    = CONFIG.AnimDuration
+
+	local absDiff = math.abs(diff)
+	if absDiff > 1e6 then duration = math.min(duration * 1.5, 2.0) end
+	if absDiff > 1e9 then duration = math.min(duration * 2.0, 2.0) end
+
+	animConn = RunService.Heartbeat:Connect(function()
+		-- Re-check label is still alive every frame
+		if not cashLabel or not cashLabel.Parent then
+			cancelAnim(); return
+		end
+
+		local elapsed  = tick() - startTime
+		local progress = math.min(elapsed / duration, 1)
+
+		local eased
+		if progress < 1 then
+			eased = 1 - math.pow(2, -10 * progress)
+		else
+			eased = 1
+		end
+
+		local current  = startAmount + diff * eased
+		displayedCash  = current
+		cashLabel.Text = formatCash(current)
+
+		if progress >= 1 then
+			displayedCash  = targetAmount
+			cashLabel.Text = formatCash(targetAmount)
+			cancelAnim()
+		end
+	end)
+end
+
+-- =====================================================
+-- POPUP FLOATERS
+-- =====================================================
+local function spawnPopups(totalAmount)
+	if not CONFIG.Popup.Enabled then return end
+	if not cashLabel or not cashLabel.Parent then return end
+	if totalAmount <= 0 then return end
+
+	local gui = playerGui:FindFirstChild(CONFIG.GuiPath.ScreenGuiName)
+	if not gui then return end
+
+	local count    = CONFIG.Popup.Count
+	local perPopup = totalAmount / count
+	if perPopup < 1 then return end
+
+	local popupText = "+" .. formatCash(perPopup)
+
+	local overlay = gui:FindFirstChild("__MoneyPopupOverlay")
+	if not overlay then
+		overlay                        = Instance.new("Frame")
+		overlay.Name                   = "__MoneyPopupOverlay"
+		overlay.Size                   = UDim2.new(1, 0, 1, 0)
+		overlay.BackgroundTransparency = 1
+		overlay.ZIndex                 = 50
+		overlay.Parent                 = gui
+	end
+
+	local labelPos  = cashLabel.AbsolutePosition
+	local labelSize = cashLabel.AbsoluteSize
+	local centerX   = labelPos.X + labelSize.X * 0.5
+	local centerY   = labelPos.Y + labelSize.Y * 0.5
+
+	for i = 1, count do
+		task.delay((i - 1) * CONFIG.Popup.Stagger, function()
+			local lbl                  = Instance.new("TextLabel")
+			lbl.Size                   = UDim2.new(0, 100, 0, 28)
+			lbl.BackgroundTransparency = 1
+			lbl.Text                   = popupText
+			lbl.TextColor3             = Color3.fromRGB(80, 255, 110)
+			lbl.TextStrokeColor3       = Color3.fromRGB(0, 0, 0)
+			lbl.TextStrokeTransparency = 0.3
+			lbl.Font                   = Enum.Font.GothamBlack
+			lbl.TextSize               = CONFIG.Popup.FontSize
+			lbl.ZIndex                 = 51
+			lbl.TextXAlignment         = Enum.TextXAlignment.Center
+
+			local spread  = CONFIG.Popup.SpreadRadius
+			local offsetX = math.random(-spread, spread)
+			local offsetY = math.random(-20, 20)
+
+			lbl.Position = UDim2.new(0, centerX - 50 + offsetX, 0, centerY - 14 + offsetY)
+			lbl.Parent   = overlay
+
+			local floatTween = TweenService:Create(lbl,
+				TweenInfo.new(CONFIG.Popup.FadeDuration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{
+					Position               = UDim2.new(0, centerX - 50 + offsetX, 0, centerY - 14 + offsetY - CONFIG.Popup.FloatHeight),
+					TextTransparency       = 1,
+					TextStrokeTransparency = 1,
+				}
+			)
+			floatTween:Play()
+			floatTween.Completed:Connect(function() lbl:Destroy() end)
+		end)
+	end
+end
+
+-- =====================================================
+-- REMOTES
+-- =====================================================
+local remoteFolder = ReplicatedStorage:WaitForChild("MoneyRemotes", 15)
+if not remoteFolder then
+	warn("[MoneyClient] MoneyRemotes not found")
+	return
+end
+
+local getCashRemote     = remoteFolder:WaitForChild("GetCash",     10)
+local cashUpdatedRemote = remoteFolder:WaitForChild("CashUpdated", 10)
+if not getCashRemote or not cashUpdatedRemote then
+	warn("[MoneyClient] Remotes missing")
+	return
+end
+
+-- =====================================================
+-- CORE SYNC FUNCTION
+-- Used by both cashUpdatedRemote and CharacterAdded
+-- =====================================================
+local function syncFromServer(snap)
+	-- snap = true means skip animation, just set immediately (used on respawn)
+	local ok, currentCash = pcall(function()
+		return getCashRemote:InvokeServer()
+	end)
+	if ok and type(currentCash) == "number" then
+		if snap then
+			setImmediate(currentCash)
+		else
+			local earned = currentCash - displayedCash
+			animateTo(currentCash)
+			if earned > 0 then spawnPopups(earned) end
+		end
+		print("[MoneyClient] Synced: " .. formatCash(currentCash))
+	end
+end
+
+-- =====================================================
+-- LISTEN FOR SERVER PUSH UPDATES
+-- Fires whenever MoneyService calls syncClient:
+--   MoneyGiver touch, admin action, any MoneyAPI call
+-- =====================================================
+cashUpdatedRemote.OnClientEvent:Connect(function(newCash)
+	newCash = tonumber(newCash) or 0
+
+	-- Always re-check label is alive before updating
+	if not cashLabel or not cashLabel.Parent then
+		refreshLabel()
+	end
+
+	local earned = newCash - displayedCash
+	animateTo(newCash)
+	if earned > 0 then spawnPopups(earned) end
+end)
+
+-- =====================================================
+-- RESPAWN HANDLER
+-- Fires every time the character is added (including
+-- first spawn). Re-finds the label then snaps to the
+-- correct server value — no animation on respawn.
+-- =====================================================
+player.CharacterAdded:Connect(function()
+	-- Cancel any in-flight animation immediately
+	cancelAnim()
+	cashLabel = nil   -- force re-find — old reference is destroyed
+
+	task.defer(function()
+		-- Wait for the GUI to be ready after respawn
+		local found = refreshLabel()
+		if not found then
+			warn("[MoneyClient] Respawn: could not find OurCash label")
+			return
+		end
+		-- Snap to server value — no count-up animation on respawn
+		syncFromServer(true)
+	end)
+end)
+
+-- =====================================================
+-- INITIAL LOAD
+-- =====================================================
+refreshLabel()
+syncFromServer(true)
+print("[MoneyClient] Ready")
