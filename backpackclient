@@ -113,6 +113,7 @@ local CARRIABLE = {
 local function cacheModelTemplate(model)
 	if not model:IsA("Model") then return end
 	if model:GetAttribute("EquippedDisplay") then return end
+	if model:GetAttribute("PlacedBy") then return end
 	local name = model.Name
 	if not CARRIABLE[name] then return end
 	local clone = model:Clone()

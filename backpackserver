@@ -2,6 +2,7 @@
 -- made by elijxhraz
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerStorage     = game:GetService("ServerStorage")
 local Players           = game:GetService("Players")
 
 local remotes = Instance.new("Folder")
@@ -369,5 +370,54 @@ Players.PlayerRemoving:Connect(function(player)
 	carryingBrainrot[player] = nil
 	collectDebounce[player]  = nil
 end)
+
+-- ── Placement integration ─────────────────────────────────────────────────────
+-- BindableFunctions in ServerStorage so PlacementServer can call them.
+local placementBindables = Instance.new("Folder")
+placementBindables.Name   = "PlacementBindables"
+placementBindables.Parent = ServerStorage
+
+-- RemoveEquippedItem(player) → itemRecord | nil
+-- Removes the currently equipped item from the player's backpack and returns it.
+local removeEquippedFunc      = Instance.new("BindableFunction")
+removeEquippedFunc.Name       = "RemoveEquippedItem"
+removeEquippedFunc.Parent     = placementBindables
+removeEquippedFunc.OnInvoke   = function(player)
+	local data = getPlayerData(player)
+	local slot = data.equipped
+	if not slot or not data.hotbar[slot] then return nil end
+
+	local item = data.hotbar[slot]
+
+	-- Remove from hotbar
+	data.hotbar[slot] = nil
+
+	-- Remove from items list
+	for i, v in ipairs(data.items) do
+		if v == item then table.remove(data.items, i); break end
+	end
+
+	data.equipped = nil
+	syncToClient(player)
+	return item
+end
+
+-- AddItemToBackpack(player, itemRecord)
+-- Returns an item to the player's backpack (hotbar first, bag otherwise).
+local addItemFunc    = Instance.new("BindableFunction")
+addItemFunc.Name     = "AddItemToBackpack"
+addItemFunc.Parent   = placementBindables
+addItemFunc.OnInvoke = function(player, itemRecord)
+	if not itemRecord then return end
+	local data = getPlayerData(player)
+	local slot = nextFreeSlot(data)
+	if slot then
+		data.hotbar[slot] = itemRecord
+		table.insert(data.items, itemRecord)
+	else
+		table.insert(data.items, itemRecord)
+	end
+	syncToClient(player)
+end
 
 print("[BackpackServer] Ready")

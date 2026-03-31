@@ -1,0 +1,57 @@
+-- StarterPlayerScripts/PlacementClient.client.lua
+-- made by elijxhraz
+--
+-- Client-side placement support:
+--   • Hides "Pick Up" proximity prompts on models placed by other players
+--     so they appear non-interactive to everyone but the owner.
+
+local Players = game:GetService("Players")
+
+local player = Players.LocalPlayer
+
+-- ── Handle a model that may be a placed item ──────────────────────────────────
+local function applyOwnershipToModel(model)
+	if not model:IsA("Model") and not model:IsA("BasePart") then return end
+
+	local placedBy = model:GetAttribute("PlacedBy")
+	if not placedBy then return end
+
+	local isOwner = (placedBy == player.UserId)
+
+	-- Disable "Pick Up" prompts for non-owners
+	local function checkPrompt(d)
+		if d:IsA("ProximityPrompt") and d.ActionText == "Pick Up" then
+			d.Enabled = isOwner
+		end
+	end
+
+	for _, d in ipairs(model:GetDescendants()) do
+		checkPrompt(d)
+	end
+
+	-- Also catch prompts added after the model arrives
+	model.DescendantAdded:Connect(function(d)
+		-- Re-read attribute in case it was set after parenting
+		local pb = model:GetAttribute("PlacedBy")
+		if d:IsA("ProximityPrompt") and d.ActionText == "Pick Up" then
+			d.Enabled = (pb == player.UserId)
+		end
+	end)
+end
+
+-- ── Watch workspace for newly placed models ───────────────────────────────────
+for _, child in ipairs(workspace:GetChildren()) do
+	applyOwnershipToModel(child)
+end
+
+workspace.ChildAdded:Connect(applyOwnershipToModel)
+
+-- Also handle children added to existing folders/models in workspace
+-- (e.g. Brainrots folder or other containers)
+workspace.DescendantAdded:Connect(function(d)
+	if d:GetAttribute("PlacedBy") then
+		applyOwnershipToModel(d)
+	end
+end)
+
+print("[PlacementClient] Ready")

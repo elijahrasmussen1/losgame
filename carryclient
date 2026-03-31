@@ -217,6 +217,8 @@ end
 -- ── Watch workspace ───────────────────────────────────────────────────────────
 local function checkInstance(child)
 	if child:GetAttribute("EquippedDisplay") then return end
+	-- Never carry models that have been placed via the placement system
+	if child:GetAttribute("PlacedBy") then return end
 	if child:IsA("Model") and CARRIABLE[child.Name] then
 		hookModel(child)
 	end
@@ -230,17 +232,20 @@ workspace.ChildAdded:Connect(checkInstance)
 -- ── Watch Brainrots folder ────────────────────────────────────────────────────
 local function watchBrainrotsFolder(folder)
 	for _, child in ipairs(folder:GetChildren()) do
-		if not child:GetAttribute("EquippedDisplay") and child:IsA("Model") and CARRIABLE[child.Name] then
+		if not child:GetAttribute("EquippedDisplay") and not child:GetAttribute("PlacedBy")
+			and child:IsA("Model") and CARRIABLE[child.Name] then
 			hookModel(child)
 		end
 	end
 	folder.ChildAdded:Connect(function(child)
-		if not child:GetAttribute("EquippedDisplay") and child:IsA("Model") and CARRIABLE[child.Name] then
+		if not child:GetAttribute("EquippedDisplay") and not child:GetAttribute("PlacedBy")
+			and child:IsA("Model") and CARRIABLE[child.Name] then
 			hookModel(child)
 		end
 	end)
 	folder.DescendantAdded:Connect(function(d)
-		if not d:GetAttribute("EquippedDisplay") and d:IsA("Model") and CARRIABLE[d.Name] then
+		if not d:GetAttribute("EquippedDisplay") and not d:GetAttribute("PlacedBy")
+			and d:IsA("Model") and CARRIABLE[d.Name] then
 			hookModel(d)
 		end
 	end)

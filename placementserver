@@ -1,0 +1,230 @@
+-- ServerScriptService/PlacementServer.server.lua
+-- made by elijxhraz
+--
+-- Handles the "Place Brainrot" placement system:
+--   • Player equips an item in their hotbar, then triggers the
+--     "Place Brainrot" ProximityPrompt on any "PlacePart" in the workspace.
+--   • The equipped item is removed from their backpack and a model is
+--     spawned, anchored at PlacePart's Attachment.
+--   • A "Pick Up" prompt is added to the placed model. Only the owner
+--     can trigger it; doing so returns the item to their backpack.
+--   • When the owner leaves the game, their placed models are removed.
+
+local Players           = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerStorage     = game:GetService("ServerStorage")
+
+-- ── Wait for BackpackServer bindables ─────────────────────────────────────────
+local placementBindables = ServerStorage:WaitForChild("PlacementBindables", 60)
+if not placementBindables then
+	error("[PlacementServer] PlacementBindables not found in ServerStorage after 60s. "
+		.. "Ensure BackpackServer is running and has created the folder.")
+end
+local removeEquippedFunc = placementBindables:WaitForChild("RemoveEquippedItem")
+local addItemFunc        = placementBindables:WaitForChild("AddItemToBackpack")
+
+-- ── Model template lookup (mirrors backpackclient logic) ──────────────────────
+local modelsFolder = ReplicatedStorage:FindFirstChild("BrainrotModels")
+
+local function getModelTemplate(modelName)
+	if not modelName or modelName == "" then return nil end
+	if modelsFolder then
+		local t = modelsFolder:FindFirstChild(modelName)
+			or modelsFolder:FindFirstChild(modelName, true)
+		if t then return t end
+	end
+	local t = ReplicatedStorage:FindFirstChild(modelName)
+		or ReplicatedStorage:FindFirstChild(modelName, true)
+	if t then return t end
+	-- Fallback: search workspace Brainrots folder
+	local bf = workspace:FindFirstChild("Brainrots")
+	if bf then
+		t = bf:FindFirstChild(modelName, true)
+		if t then return t end
+	end
+	return workspace:FindFirstChild(modelName, true)
+end
+
+-- ── Placed-item registry ───────────────────────────────────────────────────────
+-- Key: placed model, Value: { owner = UserId, item = itemRecord }
+local placedItems = {}
+
+-- ── Hook "Pick Up" prompt on a freshly placed model ───────────────────────────
+local function hookPickupPrompt(model, ownerUserId, itemRecord)
+	local root = model.PrimaryPart
+		or model:FindFirstChildWhichIsA("MeshPart", true)
+		or model:FindFirstChildWhichIsA("BasePart", true)
+	if not root then
+		warn("[PlacementServer] No root part on placed model", model.Name)
+		return
+	end
+
+	local prompt             = Instance.new("ProximityPrompt")
+	prompt.ObjectText        = itemRecord.name or model.Name
+	prompt.ActionText        = "Pick Up"
+	prompt.MaxActivationDistance = 10
+	prompt.RequiresLineOfSight   = false
+	prompt.Parent            = root
+
+	prompt.Triggered:Connect(function(player)
+		-- Server-side owner validation: other players are silently rejected
+		if player.UserId ~= ownerUserId then return end
+		local entry = placedItems[model]
+		if not entry then return end
+
+		placedItems[model] = nil
+		model:Destroy()
+		addItemFunc:Invoke(player, itemRecord)
+		print("[PlacementServer]", player.Name, "picked up", itemRecord.name or model.Name)
+	end)
+end
+
+-- ── Set up a single PlacePart ─────────────────────────────────────────────────
+local hookedParts = {}
+
+local function setupPlacePart(placePart)
+	if hookedParts[placePart] then return end
+	hookedParts[placePart] = true
+
+	-- Support both BasePart and Model PlaceParts
+	local attachment = nil
+	if placePart:IsA("BasePart") then
+		attachment = placePart:FindFirstChildWhichIsA("Attachment")
+	else
+		attachment = placePart:FindFirstChildWhichIsA("Attachment", true)
+	end
+
+	if not attachment then
+		warn("[PlacementServer] PlacePart '" .. placePart.Name .. "' has no Attachment – skipping")
+		return
+	end
+
+	-- Find the "Place Brainrot" ProximityPrompt (match by ActionText or Name)
+	local prompt = nil
+	local function findPrompt(obj)
+		for _, d in ipairs(obj:GetDescendants()) do
+			if d:IsA("ProximityPrompt") then
+				if d.ActionText == "Place Brainrot" or d.Name == "Place Brainrot" then
+					return d
+				end
+			end
+		end
+		return nil
+	end
+	prompt = findPrompt(placePart)
+
+	if not prompt then
+		-- Wait briefly in case the prompt is added dynamically
+		local found = false
+		local conn
+		conn = placePart.DescendantAdded:Connect(function(d)
+			if found then return end
+			if d:IsA("ProximityPrompt")
+				and (d.ActionText == "Place Brainrot" or d.Name == "Place Brainrot") then
+				found  = true
+				prompt = d
+				conn:Disconnect()
+			end
+		end)
+		local elapsed = 0
+		while not found and placePart.Parent and elapsed < 10 do
+			task.wait(0.2)
+			elapsed += 0.2
+		end
+		if conn then conn:Disconnect() end
+		if not found then
+			warn("[PlacementServer] No 'Place Brainrot' ProximityPrompt on", placePart.Name)
+			return
+		end
+	end
+
+	prompt.Triggered:Connect(function(player)
+		local itemRecord = removeEquippedFunc:Invoke(player)
+		if not itemRecord then
+			print("[PlacementServer]", player.Name, "has no item equipped – nothing placed")
+			return
+		end
+
+		local modelName = itemRecord.modelName or itemRecord.name
+		local template  = getModelTemplate(modelName)
+		if not template then
+			warn("[PlacementServer] Model template not found for:", modelName, "– returning item to backpack")
+			addItemFunc:Invoke(player, itemRecord)
+			return
+		end
+
+		-- Clone and strip interactable/executable descendants.
+		-- Original prompts are replaced by the placement "Pick Up" prompt;
+		-- scripts are removed so that template behaviours don't run on placed copies.
+		local clone = template:Clone()
+		clone:SetAttribute("PlacedBy", player.UserId)
+		clone:SetAttribute("PlacedItemName", modelName)
+
+		for _, d in ipairs(clone:GetDescendants()) do
+			if d:IsA("ProximityPrompt") or d:IsA("ClickDetector")
+				or d:IsA("Script")       or d:IsA("LocalScript") then
+				d:Destroy()
+			end
+		end
+
+		-- Anchor all parts
+		for _, p in ipairs(clone:GetDescendants()) do
+			if p:IsA("BasePart") then
+				p.Anchored   = true
+				p.CanCollide = true
+			end
+		end
+		if clone:IsA("BasePart") then
+			clone.Anchored   = true
+			clone.CanCollide = true
+		end
+
+		-- Parent first so PivotTo works correctly
+		clone.Parent = workspace
+
+		-- Snap to attachment world CFrame
+		local attachCF = attachment.WorldCFrame
+		if clone.PrimaryPart then
+			clone:PivotTo(attachCF)
+		else
+			local root = clone:FindFirstChildWhichIsA("MeshPart", true)
+				or clone:FindFirstChildWhichIsA("BasePart", true)
+			if root then
+				root.CFrame = attachCF
+			end
+		end
+
+		placedItems[clone] = { owner = player.UserId, item = itemRecord }
+		hookPickupPrompt(clone, player.UserId, itemRecord)
+
+		print("[PlacementServer]", player.Name, "placed", modelName, "at", placePart.Name)
+	end)
+
+	print("[PlacementServer] Hooked PlacePart:", placePart.Name)
+end
+
+-- ── Watch workspace for PlacePart(s) ─────────────────────────────────────────
+local function checkInstance(obj)
+	if obj.Name == "PlacePart" then
+		setupPlacePart(obj)
+	end
+end
+
+for _, child in ipairs(workspace:GetChildren()) do
+	checkInstance(child)
+end
+workspace.ChildAdded:Connect(checkInstance)
+
+-- ── Clean up placed models when the owner leaves ──────────────────────────────
+Players.PlayerRemoving:Connect(function(player)
+	for model, entry in pairs(placedItems) do
+		if entry.owner == player.UserId then
+			placedItems[model] = nil
+			if model and model.Parent then
+				model:Destroy()
+			end
+		end
+	end
+end)
+
+print("[PlacementServer] Ready")
