@@ -153,6 +153,9 @@ if not backpackAPIBindable then
 	warn("[AdminRemote] BackpackAPIBindable not found — backpack commands disabled")
 end
 
+local placementBindables  = ServerStorage:WaitForChild("PlacementBindables", 30)
+local addItemToBackpack   = placementBindables and placementBindables:WaitForChild("AddItemToBackpack", 30)
+
 local function backpackApiCall(action, player)
 	if not backpackAPIBindable then return nil end
 	local ok, result = pcall(function()
@@ -694,6 +697,18 @@ adminRemote.OnServerEvent:Connect(function(sender, action, arg1, arg2, arg3)
 		if itemName == "wavecoins" then
 			local newBal = waveCoinApiCall("AddCoins", t, 10)
 			warn(string.format("[AdminRemote] give_item wavecoins: +10 → %s (balance=%s)", t.Name, tostring(newBal)))
+		elseif itemName == "noobinicakenini" then
+			if addItemToBackpack then
+				local record = {name="NoobiniCakenini", modelName="NoobiniCakenini", level=1}
+				local ok, err = pcall(function() addItemToBackpack:Invoke(t, record) end)
+				if ok then
+					warn("[AdminRemote] give_item NoobiniCakenini → " .. t.Name)
+				else
+					warn("[AdminRemote] give_item NoobiniCakenini failed: " .. tostring(err))
+				end
+			else
+				warn("[AdminRemote] give_item: AddItemToBackpack bindable not found")
+			end
 		else
 			warn("[AdminRemote] give_item: unknown item '" .. itemName .. "'")
 		end

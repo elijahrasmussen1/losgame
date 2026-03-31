@@ -53,7 +53,8 @@ local pendingPlaceSlot = {}
 
 -- Items that are tools and cannot be placed in the world
 local TOOL_ITEMS = {
-	["BackpackGlove"] = true,
+	["BackpackGlove"]    = true,
+	["NoobiniCakenini"]  = true,
 }
 
 -- ── Track client-reported equipped slot for reliable placement ────────────────
