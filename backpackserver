@@ -66,7 +66,7 @@ local function ensureBackpackGloveInInventory(player)
 	local data = playerData[player] or {}
 	local GLOVE_NAME = "BackpackGlove"
 	-- Check if already present (hotbar or items)
-	for i = 1, 10 do
+	for i = 1, 7 do
 		local itm = data.hotbar and data.hotbar[i]
 		if itm and (itm.name == GLOVE_NAME or itm.modelName == GLOVE_NAME) then
 			print("[BackpackServer] BackpackGlove: already present in hotbar for", player.Name)
@@ -99,7 +99,7 @@ local function ensureBackpackGloveInInventory(player)
 	if not data.hotbar then data.hotbar = {} end
 	if not data.items then data.items = {} end
 	-- Add to first free hotbar slot if possible
-	for i = 1, 10 do
+	for i = 1, 7 do
 		if not data.hotbar[i] then
 			data.hotbar[i] = itemEntry
 			table.insert(data.items, itemEntry)
@@ -141,7 +141,7 @@ local function loadPlayerData(player)
 end
 
 local function nextFreeSlot(data)
-	for i = 1, 10 do
+	for i = 1, 7 do
 		if not data.hotbar[i] then return i end
 	end
 	return nil
@@ -176,7 +176,38 @@ local function savePlayerData(player)
 end
 
 local function syncToClient(player)
-	syncRemote:FireClient(player, getPlayerData(player))
+	local data = getPlayerData(player)
+	-- Build the bag: items in data.items that are not assigned to a hotbar slot.
+	-- Use reference equality first (same-session items), fall back to content match
+	-- for items reloaded from DataStore (different objects, same content).
+	local hotbarRefs = {}
+	for i = 1, 7 do
+		if data.hotbar[i] then hotbarRefs[data.hotbar[i]] = true end
+	end
+	local hotbarSnapshot = {}
+	for i = 1, 7 do
+		if data.hotbar[i] then
+			local itm = data.hotbar[i]
+			local key = (itm.name or "") .. "|" .. tostring(itm.level or 1) .. "|" .. (itm.modelName or "")
+			hotbarSnapshot[key] = (hotbarSnapshot[key] or 0) + 1
+		end
+	end
+	local remaining = {}
+	local contentCounts = {}
+	for _, item in ipairs(data.items) do
+		if not hotbarRefs[item] then
+			local key = (item.name or "") .. "|" .. tostring(item.level or 1) .. "|" .. (item.modelName or "")
+			contentCounts[key] = (contentCounts[key] or 0) + 1
+			if not hotbarSnapshot[key] or contentCounts[key] > hotbarSnapshot[key] then
+				table.insert(remaining, item)
+			end
+		end
+	end
+	syncRemote:FireClient(player, {
+		hotbar   = data.hotbar,
+		equipped = data.equipped,
+		bag      = remaining,
+	})
 end
 
 local function getRoot(model)
@@ -394,23 +425,26 @@ if StartArea then
 		local data = getPlayerData(player)
 		local slot = nextFreeSlot(data)
 
-		if slot then
-			local itemRecord = {
-				name      = model.Name,
-				icon      = model:GetAttribute("Icon") or "",
-				modelName = model.Name,
-			}
-			data.hotbar[slot] = itemRecord
-			table.insert(data.items, itemRecord)
+		local itemRecord = {
+			name      = model.Name,
+			icon      = model:GetAttribute("Icon") or "",
+			modelName = model.Name,
+		}
 
-			stopCarryRemote:FireClient(player)
-			brainrotCollected:FireClient(player, slot, itemRecord)
-			model:Destroy()
-			carryingBrainrot[player] = nil
-			syncToClient(player)
-			print("[BackpackServer]", player.Name, "collected", itemRecord.name, "into slot", slot)
+		if slot then
+			data.hotbar[slot] = itemRecord
+		end
+		table.insert(data.items, itemRecord)
+
+		stopCarryRemote:FireClient(player)
+		brainrotCollected:FireClient(player, slot, itemRecord)
+		model:Destroy()
+		carryingBrainrot[player] = nil
+		syncToClient(player)
+		if slot then
+			print("[BackpackServer]", player.Name, "collected", itemRecord.name, "into hotbar slot", slot)
 		else
-			warn("[BackpackServer]", player.Name, "hotbar is full!")
+			print("[BackpackServer]", player.Name, "collected", itemRecord.name, "into bag (hotbar full)")
 		end
 
 		task.wait(1)
