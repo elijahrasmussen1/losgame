@@ -169,6 +169,8 @@ for _, d in ipairs(clone:GetDescendants()) do
 if d:IsA("ProximityPrompt") or d:IsA("ClickDetector")
 or d:IsA("Script")       or d:IsA("LocalScript") then
 d:Destroy()
+elseif d:IsA("BillboardGui") and d.Name == "TimerGui" then
+d:Destroy()
 end
 end
 
