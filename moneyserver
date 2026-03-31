@@ -1,0 +1,249 @@
+-- MoneyService.server.lua
+-- ServerScriptService
+
+local Players           = game:GetService("Players")
+local DataStoreService  = game:GetService("DataStoreService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerStorage     = game:GetService("ServerStorage")
+
+-- =====================================================
+-- CONFIGURATION
+-- =====================================================
+local CONFIG = {
+	DataStoreName    = "MoneyData_v1",
+	DefaultCash      = 0,
+	AutoSaveInterval = 60,
+	MaxCash          = 1e63,
+	MinCash          = 0,
+	LeaderstatName   = "Cash",
+}
+
+-- =====================================================
+-- DATASTORE
+-- =====================================================
+local MoneyStore = DataStoreService:GetDataStore(CONFIG.DataStoreName)
+
+-- =====================================================
+-- REMOTES
+-- =====================================================
+local remoteFolder = ReplicatedStorage:FindFirstChild("MoneyRemotes")
+if not remoteFolder then
+	remoteFolder        = Instance.new("Folder")
+	remoteFolder.Name   = "MoneyRemotes"
+	remoteFolder.Parent = ReplicatedStorage
+end
+
+local function getOrCreate(name, class)
+	local obj = remoteFolder:FindFirstChild(name)
+	if not obj then
+		obj        = Instance.new(class)
+		obj.Name   = name
+		obj.Parent = remoteFolder
+	end
+	return obj
+end
+
+local getCashRemote     = getOrCreate("GetCash",     "RemoteFunction")
+local cashUpdatedRemote = getOrCreate("CashUpdated", "RemoteEvent")
+
+-- =====================================================
+-- CACHE
+-- =====================================================
+local playerData = {}
+
+-- =====================================================
+-- HELPERS
+-- =====================================================
+local function clamp(value)
+	return math.max(CONFIG.MinCash, math.min(CONFIG.MaxCash, value))
+end
+
+local function getKey(player)
+	return "player_" .. tostring(player.UserId)
+end
+
+-- Syncs the internal cache → leaderstats IntValue → client UI
+-- This is the ONLY place cash is pushed to the client
+local function syncClient(player)
+	local data = playerData[player.UserId]
+	if not data then return end
+	-- Update the leaderboard IntValue
+	local ls = player:FindFirstChild("leaderstats")
+	if ls then
+		local stat = ls:FindFirstChild(CONFIG.LeaderstatName)
+		if stat then stat.Value = data.cash end
+	end
+	-- Fire client UI update
+	cashUpdatedRemote:FireClient(player, data.cash)
+end
+
+-- =====================================================
+-- LOAD / SAVE
+-- =====================================================
+local function loadData(player)
+	local key  = getKey(player)
+	local cash = CONFIG.DefaultCash
+	local tries, success, result = 0, false, nil
+	repeat
+		tries  += 1
+		success, result = pcall(function() return MoneyStore:GetAsync(key) end)
+		if not success then task.wait(2) end
+	until success or tries >= 3
+
+	if success and type(result) == "table" then
+		cash = clamp(result.cash or CONFIG.DefaultCash)
+	end
+	playerData[player.UserId] = { cash = cash, dirty = false }
+	print(string.format("[MoneyService] Loaded $%g for %s", cash, player.Name))
+end
+
+local function saveData(player, data)
+	data = data or playerData[player.UserId]
+	if not data or not data.dirty then return end
+	local key     = getKey(player)
+	local payload = { cash = data.cash }
+	local tries, success, err = 0, false, nil
+	repeat
+		tries  += 1
+		success, err = pcall(function() MoneyStore:SetAsync(key, payload) end)
+		if not success then task.wait(2) end
+	until success or tries >= 3
+	if success then
+		data.dirty = false
+		print(string.format("[MoneyService] Saved $%g for %s", data.cash, player.Name))
+	else
+		warn(string.format("[MoneyService] Save FAILED for %s: %s", player.Name, tostring(err)))
+	end
+end
+
+-- =====================================================
+-- PUBLIC API
+-- =====================================================
+local MoneyAPI = {}
+
+function MoneyAPI.GetCash(player)
+	local d = playerData[player.UserId]
+	return d and d.cash or nil
+end
+
+function MoneyAPI.SetCash(player, amount)
+	local d = playerData[player.UserId]
+	if not d then return false end
+	d.cash = clamp(amount); d.dirty = true
+	syncClient(player)
+	return true
+end
+
+function MoneyAPI.AddCash(player, amount)
+	local d = playerData[player.UserId]
+	if not d then return false end
+	d.cash = clamp(d.cash + amount); d.dirty = true
+	syncClient(player)
+	return true
+end
+
+function MoneyAPI.SpendCash(player, amount)
+	local d = playerData[player.UserId]
+	if not d then return false end
+	if d.cash < amount then return false, "Insufficient funds" end
+	d.cash = clamp(d.cash - amount); d.dirty = true
+	syncClient(player)
+	return true
+end
+
+-- BindableFunction so AdminRemote and other server scripts can call MoneyAPI
+local apiBindable = ServerStorage:FindFirstChild("MoneyAPIBindable")
+if not apiBindable then
+	apiBindable        = Instance.new("BindableFunction")
+	apiBindable.Name   = "MoneyAPIBindable"
+	apiBindable.Parent = ServerStorage
+end
+apiBindable.OnInvoke = function(action, player, amount)
+	if action == "GetCash"   then return MoneyAPI.GetCash(player)        end
+	if action == "SetCash"   then return MoneyAPI.SetCash(player, amount) end
+	if action == "AddCash"   then return MoneyAPI.AddCash(player, amount) end
+	if action == "SpendCash" then return MoneyAPI.SpendCash(player, amount) end
+end
+
+-- =====================================================
+-- PLAYER EVENTS
+-- =====================================================
+local function onPlayerAdded(player)
+	-- Create leaderstats ONCE — MoneyService owns this, do NOT create it in LeaderStats.server.lua
+	local ls = player:FindFirstChild("leaderstats")
+	if not ls then
+		ls        = Instance.new("Folder")
+		ls.Name   = "leaderstats"
+		ls.Parent = player
+	end
+
+	-- Ensure Cash stat exists
+	local stat = ls:FindFirstChild(CONFIG.LeaderstatName)
+	if not stat then
+		stat        = Instance.new("NumberValue")
+		stat.Name   = CONFIG.LeaderstatName
+		stat.Value  = 0
+		stat.Parent = ls
+	end
+
+	-- Also create Speed and Rebirths so the leaderboard still shows them
+	-- These are managed by your gameplay scripts — we just ensure they exist
+	local function ensureStat(name)
+		if not ls:FindFirstChild(name) then
+			local v        = Instance.new("IntValue")
+			v.Name         = name
+			v.Value        = 0
+			v.Parent       = ls
+		end
+	end
+	ensureStat("Speed")
+	ensureStat("Rebirths")
+
+	-- Load from DataStore and push to client
+	loadData(player)
+	syncClient(player)
+
+	-- On respawn: re-sync from cache so the UI never shows $0
+	-- The cache is the source of truth — death does not change it
+	player.CharacterAdded:Connect(function()
+		-- Small defer so the character is fully loaded before we sync
+		task.defer(function()
+			syncClient(player)
+		end)
+	end)
+end
+
+local function onPlayerRemoving(player)
+	local d = playerData[player.UserId]
+	if d then saveData(player, d); playerData[player.UserId] = nil end
+end
+
+getCashRemote.OnServerInvoke = function(player)
+	local d = playerData[player.UserId]
+	return d and d.cash or 0
+end
+
+-- Auto-save loop
+task.spawn(function()
+	while true do
+		task.wait(CONFIG.AutoSaveInterval)
+		for _, p in ipairs(Players:GetPlayers()) do
+			local d = playerData[p.UserId]
+			if d and d.dirty then task.spawn(saveData, p, d) end
+		end
+	end
+end)
+
+Players.PlayerAdded:Connect(onPlayerAdded)
+Players.PlayerRemoving:Connect(onPlayerRemoving)
+
+game:BindToClose(function()
+	for _, p in ipairs(Players:GetPlayers()) do
+		local d = playerData[p.UserId]
+		if d then d.dirty = true; task.spawn(saveData, p, d) end
+	end
+	task.wait(math.min(#Players:GetPlayers() * 3, 25))
+end)
+
+for _, p in ipairs(Players:GetPlayers()) do task.spawn(onPlayerAdded, p) end
+print("[MoneyService] Ready")
