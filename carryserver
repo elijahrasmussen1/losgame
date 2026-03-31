@@ -1,0 +1,31 @@
+-- ServerScriptService/NoobiniCarryHandler.server.lua
+-- made by elijxhraz
+-- Handles carry pause/resume signals from clients
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+-- uhhhhhhhhhhhhhhhhhhhhhhhhh uh
+local carryEvent      = Instance.new("RemoteEvent")
+carryEvent.Name       = "CarryEvent"
+carryEvent.Parent     = ReplicatedStorage
+
+-- hey alexa play vet by 2slimey
+local pauseBridge  = Instance.new("BindableEvent")
+pauseBridge.Name   = "TimerPauseBridge"
+pauseBridge.Parent = ReplicatedStorage
+
+local resumeBridge  = Instance.new("BindableEvent")
+resumeBridge.Name   = "TimerResumeBridge"
+resumeBridge.Parent = ReplicatedStorage
+
+carryEvent.OnServerEvent:Connect(function(player, action)
+	if action == "pause" then
+		print("[CarryHandler] " .. player.Name .. " picked up — pausing timer")
+		pauseBridge:Fire()
+	elseif action == "resume" then
+		print("[CarryHandler] " .. player.Name .. " dropped — resuming timer")
+		resumeBridge:Fire()
+	end
+end)
+
+print("[CarryHandler] Ready")
