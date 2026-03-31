@@ -1,0 +1,77 @@
+-- BrainrotIncome.server.lua
+-- ServerScriptService
+--
+-- Awards passive income every second to a player for each brainrot they have
+-- placed in the world.  Hooks into the PlacedItemName / PlacedBy attributes
+-- that PlacementServer already stamps onto every placed model clone.
+--
+-- To add a new brainrot's income rate, add an entry to INCOME below.
+
+local Players       = game:GetService("Players")
+local ServerStorage = game:GetService("ServerStorage")
+
+-- ── Income table ($/second per brainrot type) ────────────────────────────────
+local INCOME = {
+	["NoobiniCakenini"] = 1,
+	-- ["SomeOtherBrainrot"] = 5,
+}
+
+-- ── Wait for MoneyService to expose its API ──────────────────────────────────
+local api = ServerStorage:WaitForChild("MoneyAPIBindable", 30)
+if not api then
+	warn("[BrainrotIncome] MoneyAPIBindable not found after 30s – passive income disabled")
+	return
+end
+
+-- ── Active income loops keyed by placed model instance ───────────────────────
+local activeLoops = {}
+
+local function startIncome(model)
+	-- Already tracking this model
+	if activeLoops[model] then return end
+
+	local itemName = model:GetAttribute("PlacedItemName")
+	local ownerId  = model:GetAttribute("PlacedBy")
+	if not itemName or not ownerId then return end
+
+	local rate = INCOME[itemName]
+	if not rate or rate <= 0 then return end
+
+	-- Spawn a self-terminating loop; exits naturally when the model is removed
+	local thread = task.spawn(function()
+		while model and model.Parent do
+			task.wait(1)
+			if not model or not model.Parent then break end
+			local player = Players:GetPlayerByUserId(ownerId)
+			if player then
+				api:Invoke("AddCash", player, rate)
+			end
+		end
+		activeLoops[model] = nil
+	end)
+	activeLoops[model] = thread
+	print(string.format("[BrainrotIncome] Started $%g/s income for userId %s (%s)",
+		rate, tostring(ownerId), itemName))
+end
+
+local function checkDescendant(obj)
+	if not (obj:IsA("Model") or obj:IsA("BasePart")) then return end
+	if obj:GetAttribute("PlacedItemName") then
+		startIncome(obj)
+	end
+end
+
+-- Scan any brainrots that are already placed (e.g. after a server restart)
+for _, desc in ipairs(workspace:GetDescendants()) do
+	pcall(checkDescendant, desc)
+end
+
+-- Watch for newly placed brainrots
+workspace.DescendantAdded:Connect(function(obj)
+	-- Defer one frame so all attributes are guaranteed to be set
+	task.defer(function()
+		pcall(checkDescendant, obj)
+	end)
+end)
+
+print("[BrainrotIncome] Ready")
