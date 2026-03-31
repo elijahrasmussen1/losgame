@@ -126,13 +126,14 @@ local function loadPlayerData(player)
 	end)
 	if ok and type(saved) == "table" then
 		playerData[player] = {
-			items    = saved.items   or {},
-			equipped = nil,
-			hotbar   = saved.hotbar  or {},
+			items       = saved.items       or {},
+			equipped    = nil,
+			hotbar      = saved.hotbar      or {},
+			placedItems = saved.placedItems or {},
 		}
 		print("[BackpackServer] Loaded data for", player.Name)
 	else
-		playerData[player] = { items = {}, equipped = nil, hotbar = {} }
+		playerData[player] = { items = {}, equipped = nil, hotbar = {}, placedItems = {} }
 		if not ok then
 			warn("[BackpackServer] DataStore load failed for", player.Name, ":", saved)
 		end
@@ -150,25 +151,20 @@ local function savePlayerData(player)
 	local data = playerData[player]
 	if not data then return end
 
-	-- Collect any currently-placed items back into the data before saving.
-	-- Look up PlacementBindables dynamically so this works regardless of
-	-- declaration order (avoids the forward-reference / nil-upvalue bug).
-	local pb = ServerStorage:FindFirstChild("PlacementBindables")
-	local retrievePlaced = pb and pb:FindFirstChild("RetrievePlacedItems")
-	if retrievePlaced then
-		local ok, placed = pcall(function() return retrievePlaced:Invoke(player) end)
-		if ok and type(placed) == "table" then
-			for _, item in ipairs(placed) do
-				local slot = nextFreeSlot(data)
-				if slot then
-					data.hotbar[slot] = item
-				end
-				table.insert(data.items, item)
-			end
+	-- Snapshot which items the player currently has placed in the world so they
+	-- can be restored on rejoin.  Placed items are NOT returned to inventory;
+	-- they remain physically in the world until the owner walks up and picks them up.
+	local pb          = ServerStorage:FindFirstChild("PlacementBindables")
+	local savePlaced  = pb and pb:FindFirstChild("SavePlacedItems")
+	local placedItems = {}
+	if savePlaced then
+		local ok, result = pcall(function() return savePlaced:Invoke(player) end)
+		if ok and type(result) == "table" then
+			placedItems = result
 		end
 	end
 
-	local savePayload = { hotbar = data.hotbar, items = data.items }
+	local savePayload = { hotbar = data.hotbar, items = data.items, placedItems = placedItems }
 	local ok2, err = pcall(function()
 		backpackStore:SetAsync(tostring(player.UserId), savePayload)
 	end)
@@ -338,6 +334,26 @@ Players.PlayerAdded:Connect(function(player)
 	loadPlayerData(player)
 	local data = getPlayerData(player)
 	ensureBackpackGloveInInventory(player)
+
+	-- Restore any items the player had placed in the world during a previous session.
+	local savedPlacements = data.placedItems
+	data.placedItems = nil
+	if savedPlacements and #savedPlacements > 0 then
+		task.spawn(function()
+			local pb = ServerStorage:WaitForChild("PlacementBindables", 15)
+			if not pb then
+				warn("[BackpackServer] PlacementBindables not found – skipping placement restoration for", player.Name)
+				return
+			end
+			local restorePlaced = pb:WaitForChild("RestorePlacedItems", 15)
+			if not restorePlaced then
+				warn("[BackpackServer] RestorePlacedItems not found – skipping placement restoration for", player.Name)
+				return
+			end
+			if not playerData[player] then return end  -- player left before restoration
+			pcall(function() restorePlaced:Invoke(player, savedPlacements) end)
+		end)
+	end
 
 	player.CharacterAdded:Connect(function(character)
 		local humanoid = character:WaitForChild("Humanoid")

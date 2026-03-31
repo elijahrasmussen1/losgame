@@ -46,10 +46,14 @@ end
 
 -- ── Placement registry ────────────────────────────────────────────────────────
 -- Key: PlacePart instance
--- Value: { owner=UserId, item=itemRecord, model=clone,
+-- Value: { partId=string, owner=UserId, item=itemRecord, model=clone,
 --          prompt=ProximityPrompt,
 --          origActionText=string, origObjectText=string }
-local placedAtParts = {}
+local placedAtParts  = {}
+-- Reverse lookup: partId (placePart:GetFullName()) → PlacePart instance
+local placePartById  = {}
+-- Prompt metadata per PlacePart, populated in setupPlacePart
+local partPromptData = {}
 
 -- ── Expose RetrievePlacedItems so BackpackServer can collect items before saving ─
 -- Returns a list of itemRecords for the given player, destroys their placed
@@ -75,6 +79,105 @@ retrievePlacedFunc.OnInvoke = function(player)
 		end
 	end
 	return collected
+end
+
+-- ── SavePlacedItems: snapshot placements without destroying anything ──────────
+-- Called by BackpackServer on PlayerRemoving so placement data survives rejoin.
+local savePlacedFunc    = Instance.new("BindableFunction")
+savePlacedFunc.Name     = "SavePlacedItems"
+savePlacedFunc.Parent   = placementBindables
+savePlacedFunc.OnInvoke = function(player)
+	local result = {}
+	for _, entry in pairs(placedAtParts) do
+		if entry.owner == player.UserId and entry.partId and entry.item then
+			table.insert(result, { partId = entry.partId, item = entry.item })
+		end
+	end
+	return result
+end
+
+-- ── RestorePlacedItems: re-create placements from saved DataStore data ────────
+-- Same-server rejoin: registry entry still exists → skip.
+-- New-server rejoin:  clone the model, register entry, set prompt to "Pick Up".
+local restorePlacedFunc    = Instance.new("BindableFunction")
+restorePlacedFunc.Name     = "RestorePlacedItems"
+restorePlacedFunc.Parent   = placementBindables
+restorePlacedFunc.OnInvoke = function(player, savedPlacements)
+	if type(savedPlacements) ~= "table" then return end
+	for _, placement in ipairs(savedPlacements) do
+		local partId = placement.partId
+		local item   = placement.item
+		if not partId or not item then continue end
+
+		local placePart = placePartById[partId]
+		if not placePart or not placePart.Parent then continue end
+
+		-- Same-server rejoin: entry is still alive, nothing to do
+		local existing = placedAtParts[placePart]
+		if existing and existing.owner == player.UserId then continue end
+
+		local pd = partPromptData[placePart]
+		if not pd then continue end
+
+		local modelName = item.modelName or item.name
+		local template  = getModelTemplate(modelName)
+		if not template then
+			warn("[PlacementServer] RestorePlacedItems: model not found for", modelName)
+			continue
+		end
+
+		local attachment
+		if placePart:IsA("BasePart") then
+			attachment = placePart:FindFirstChildWhichIsA("Attachment")
+		else
+			attachment = placePart:FindFirstChildWhichIsA("Attachment", true)
+		end
+		if not attachment then continue end
+
+		local clone = template:Clone()
+		clone:SetAttribute("PlacedBy", player.UserId)
+		clone:SetAttribute("PlacedItemName", modelName)
+		for _, d in ipairs(clone:GetDescendants()) do
+			if d:IsA("ProximityPrompt") or d:IsA("ClickDetector")
+			or d:IsA("Script")          or d:IsA("LocalScript") then
+				d:Destroy()
+			elseif d:IsA("BillboardGui") and d.Name == "TimerGui" then
+				d:Destroy()
+			end
+		end
+		for _, p in ipairs(clone:GetDescendants()) do
+			if p:IsA("BasePart") then
+				p.Anchored   = true
+				p.CanCollide = true
+			end
+		end
+		if clone:IsA("BasePart") then
+			clone.Anchored   = true
+			clone.CanCollide = true
+		end
+		clone.Parent = workspace
+
+		local attachCF = attachment.WorldCFrame
+		if clone:IsA("Model") then
+			clone:PivotTo(attachCF)
+		elseif clone:IsA("BasePart") then
+			clone.CFrame = attachCF
+		end
+
+		placedAtParts[placePart] = {
+			partId         = partId,
+			owner          = player.UserId,
+			item           = item,
+			model          = clone,
+			prompt         = pd.prompt,
+			origActionText = pd.origActionText,
+			origObjectText = pd.origObjectText,
+		}
+		pd.prompt.ActionText = "Pick Up"
+		pd.prompt.ObjectText = item.name or modelName
+		pd.prompt:SetAttribute("PlacedByUserId", player.UserId)
+		print("[PlacementServer] Restored", modelName, "for", player.Name, "at", placePart.Name)
+	end
 end
 
 -- ── Handle placement and pickup via the same prompt ───────────────────────────
@@ -145,6 +248,15 @@ end
 -- Store original prompt text so we can restore it on pickup
 local origActionText = prompt.ActionText
 local origObjectText = prompt.ObjectText
+
+-- Register this part for cross-session restoration
+local partId = placePart:GetFullName()
+placePartById[partId] = placePart
+partPromptData[placePart] = {
+	prompt         = prompt,
+	origActionText = origActionText,
+	origObjectText = origObjectText,
+}
 
 prompt.Triggered:Connect(function(player)
 local entry = placedAtParts[placePart]
@@ -226,6 +338,7 @@ end
 
 -- Record the placement and update the prompt
 placedAtParts[placePart] = {
+partId          = partId,
 owner           = player.UserId,
 item            = itemRecord,
 model           = clone,
@@ -257,33 +370,9 @@ checkInstance(child)
 end
 workspace.ChildAdded:Connect(checkInstance)
 
--- ── Clean up when the owner leaves ───────────────────────────────────────────
--- NOTE: BackpackServer calls RetrievePlacedItems(player) before saving, which
--- handles model destruction and prompt reset.  This handler is a safety net
--- for any entries that were not already collected.
---
--- task.defer pushes execution to after the current frame so BackpackServer's
--- PlayerRemoving handler (which calls RetrievePlacedItems + saves) always runs
--- first.  Without the defer, this handler can fire before BackpackServer's,
--- destroying models and clearing placedAtParts so RetrievePlacedItems finds
--- nothing and the items are lost on rejoin.
-Players.PlayerRemoving:Connect(function(player)
-	local userId = player.UserId
-	task.defer(function()
-		for placePart, entry in pairs(placedAtParts) do
-			if entry.owner == userId then
-				if entry.model and entry.model.Parent then
-					entry.model:Destroy()
-				end
-				if entry.prompt and entry.prompt.Parent then
-					entry.prompt.ActionText = entry.origActionText
-					entry.prompt.ObjectText = entry.origObjectText
-					entry.prompt:SetAttribute("PlacedByUserId", nil)
-				end
-				placedAtParts[placePart] = nil
-			end
-		end
-	end)
-end)
+-- ── Placed items persist in the world when the owner leaves ──────────────────
+-- Models are NOT destroyed on PlayerRemoving.  BackpackServer saves placement
+-- data to DataStore via SavePlacedItems and restores it via RestorePlacedItems
+-- when the owner rejoins, so the item remains visible and pickable.
 
 print("[PlacementServer] Ready")
