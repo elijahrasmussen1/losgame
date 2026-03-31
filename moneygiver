@@ -1,0 +1,200 @@
+-- MoneyGiver.server.lua
+-- ServerScriptService
+
+local Players       = game:GetService("Players")
+local ServerStorage = game:GetService("ServerStorage")
+local TweenService  = game:GetService("TweenService")
+local RunService    = game:GetService("RunService")
+
+-- =====================================================
+-- CONFIGURATION
+-- =====================================================
+local CONFIG = {
+	PartName     = "CashPart",
+	CashAmount   = 1,   -- 1 Million per touch to test suffixes
+	Cooldown     = 5,
+	ShowPopup    = true,
+	SoundId      = "rbxassetid://6042053626",
+	SoundVolume  = 0.6,
+	TouchColour  = Color3.fromRGB(80, 200, 80),
+	PartMaterial = Enum.Material.Neon,
+	PartColour   = Color3.fromRGB(22, 160, 48),
+	Rotate       = true,
+	RotateSpeed  = 90,
+	Hover        = true,
+	HoverHeight  = 0.4,
+	HoverSpeed   = 1.5,
+}
+
+-- =====================================================
+-- SUFFIX FORMAT (matches client)
+-- =====================================================
+local SUFFIXES = {
+	{ threshold = 1e63, suffix = "Vg" },
+	{ threshold = 1e60, suffix = "ND" },
+	{ threshold = 1e57, suffix = "OD" },
+	{ threshold = 1e54, suffix = "SD" },
+	{ threshold = 1e51, suffix = "sD" },
+	{ threshold = 1e48, suffix = "QD" },
+	{ threshold = 1e45, suffix = "qD" },
+	{ threshold = 1e42, suffix = "TD" },
+	{ threshold = 1e39, suffix = "DD" },
+	{ threshold = 1e36, suffix = "UD" },
+	{ threshold = 1e33, suffix = "Dc" },
+	{ threshold = 1e30, suffix = "No" },
+	{ threshold = 1e27, suffix = "Oc" },
+	{ threshold = 1e24, suffix = "Sp" },
+	{ threshold = 1e21, suffix = "Sx" },
+	{ threshold = 1e18, suffix = "Qi" },
+	{ threshold = 1e15, suffix = "Qa" },
+	{ threshold = 1e12, suffix = "T"  },
+	{ threshold = 1e9,  suffix = "B"  },
+	{ threshold = 1e6,  suffix = "M"  },
+	{ threshold = 1e3,  suffix = "K"  },
+}
+
+local function formatCash(n)
+	for _, e in ipairs(SUFFIXES) do
+		if n >= e.threshold then
+			local f = string.format("%.2f", n / e.threshold):gsub("%.?0+$", "")
+			return "$" .. f .. e.suffix
+		end
+	end
+	return "$" .. tostring(math.floor(n))
+end
+
+-- =====================================================
+-- SETUP
+-- =====================================================
+local api = ServerStorage:WaitForChild("MoneyAPIBindable", 30)
+if not api then warn("[MoneyGiver] MoneyAPIBindable not found"); return end
+
+local part = workspace:FindFirstChild(CONFIG.PartName)
+if not part then
+	part            = Instance.new("Part")
+	part.Name       = CONFIG.PartName
+	part.Size       = Vector3.new(4, 4, 4)
+	part.Position   = Vector3.new(0, 5, 0)
+	part.Anchored   = true
+	part.CanCollide = false
+	part.Shape      = Enum.PartType.Ball
+	part.Parent     = workspace
+end
+
+part.Anchored   = true
+part.CanCollide = false
+if CONFIG.PartMaterial then part.Material   = CONFIG.PartMaterial end
+if CONFIG.PartColour   then part.Color      = CONFIG.PartColour   end
+
+-- Billboard
+local billboard
+if CONFIG.ShowPopup then
+	billboard              = Instance.new("BillboardGui")
+	billboard.Size         = UDim2.new(0, 180, 0, 50)
+	billboard.StudsOffset  = Vector3.new(0, 3.5, 0)
+	billboard.AlwaysOnTop  = false
+	billboard.ResetOnSpawn = false
+	billboard.Parent       = part
+	local lbl                  = Instance.new("TextLabel")
+	lbl.Size                   = UDim2.new(1, 0, 1, 0)
+	lbl.BackgroundTransparency = 1
+	lbl.Text                   = "+" .. formatCash(CONFIG.CashAmount)
+	lbl.TextColor3             = Color3.fromRGB(80, 255, 100)
+	lbl.TextStrokeColor3       = Color3.fromRGB(0, 0, 0)
+	lbl.TextStrokeTransparency = 0.4
+	lbl.Font                   = Enum.Font.GothamBlack
+	lbl.TextScaled             = true
+	lbl.Parent                 = billboard
+end
+
+-- Sound
+local sound
+if CONFIG.SoundId and CONFIG.SoundId ~= "" then
+	sound                    = Instance.new("Sound")
+	sound.SoundId            = CONFIG.SoundId
+	sound.Volume             = CONFIG.SoundVolume
+	sound.RollOffMaxDistance = 40
+	sound.Parent             = part
+end
+
+-- Hover + Rotate
+local baseY   = part.Position.Y
+local elapsed = 0
+local origCF  = part.CFrame
+
+if CONFIG.Hover or CONFIG.Rotate then
+	RunService.Heartbeat:Connect(function(dt)
+		elapsed += dt
+		local x = origCF.Position.X
+		local z = origCF.Position.Z
+		local y = baseY
+		if CONFIG.Hover then
+			y = baseY + math.sin(elapsed * CONFIG.HoverSpeed * math.pi * 2) * CONFIG.HoverHeight
+		end
+		if CONFIG.Rotate then
+			part.CFrame = CFrame.new(x, y, z) * CFrame.Angles(0, math.rad(elapsed * CONFIG.RotateSpeed), 0)
+		else
+			part.Position = Vector3.new(x, y, z)
+		end
+	end)
+end
+
+-- Flash
+local originalColour = part.Color
+local function flashPart()
+	if not CONFIG.TouchColour then return end
+	part.Color = CONFIG.TouchColour
+	TweenService:Create(part,
+		TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{ Color = originalColour }
+	):Play()
+end
+
+-- Popup billboard animation
+local function showPopup()
+	if not billboard then return end
+	local lbl = billboard:FindFirstChildOfClass("TextLabel")
+	if not lbl then return end
+	lbl.TextTransparency = 0
+	TweenService:Create(billboard,
+		TweenInfo.new(1.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{ StudsOffset = Vector3.new(0, 7, 0) }
+	):Play()
+	TweenService:Create(lbl,
+		TweenInfo.new(0.8, Enum.EasingStyle.Quad, Enum.EasingDirection.In, 0, false, 0.4),
+		{ TextTransparency = 1 }
+	):Play()
+	task.delay(1.3, function()
+		billboard.StudsOffset = Vector3.new(0, 3.5, 0)
+		lbl.TextTransparency  = 0
+	end)
+end
+
+-- =====================================================
+-- TOUCH
+-- =====================================================
+local cooldowns = {}
+Players.PlayerRemoving:Connect(function(p) cooldowns[p.UserId] = nil end)
+
+part.Touched:Connect(function(hit)
+	local char   = hit.Parent
+	local player = Players:GetPlayerFromCharacter(char)
+	if not player then return end
+	local now = tick()
+	if cooldowns[player.UserId] and now - cooldowns[player.UserId] < CONFIG.Cooldown then return end
+	cooldowns[player.UserId] = now
+
+	local ok = api:Invoke("AddCash", player, CONFIG.CashAmount)
+	if not ok then return end
+
+	local bal = api:Invoke("GetCash", player)
+	print(string.format("[MoneyGiver] +%s to %s | Balance: %s",
+		formatCash(CONFIG.CashAmount), player.Name, formatCash(bal or 0)))
+
+	flashPart()
+	showPopup()
+	if sound then sound:Play() end
+end)
+
+print(string.format("[MoneyGiver] Ready — %s per touch | %ss cooldown",
+	formatCash(CONFIG.CashAmount), CONFIG.Cooldown))
