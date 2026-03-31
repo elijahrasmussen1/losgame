@@ -86,9 +86,8 @@ part.CanCollide = false
 if CONFIG.PartMaterial then part.Material   = CONFIG.PartMaterial end
 if CONFIG.PartColour   then part.Color      = CONFIG.PartColour   end
 
--- Hidden by default until a brainrot is placed
-part.Transparency = 1
-part.CanTouch     = false
+-- Touch disabled by default until a brainrot is placed
+part.CanTouch = false
 
 -- Billboard
 local billboard
@@ -184,8 +183,7 @@ end
 local placedCount = 0
 
 local function setCashPartActive(active)
-	part.Transparency = active and 0 or 1
-	part.CanTouch     = active
+	part.CanTouch = active
 	if billboard then
 		billboard.Enabled = active
 	end
