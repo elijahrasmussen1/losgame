@@ -261,20 +261,29 @@ workspace.ChildAdded:Connect(checkInstance)
 -- NOTE: BackpackServer calls RetrievePlacedItems(player) before saving, which
 -- handles model destruction and prompt reset.  This handler is a safety net
 -- for any entries that were not already collected.
+--
+-- task.defer pushes execution to after the current frame so BackpackServer's
+-- PlayerRemoving handler (which calls RetrievePlacedItems + saves) always runs
+-- first.  Without the defer, this handler can fire before BackpackServer's,
+-- destroying models and clearing placedAtParts so RetrievePlacedItems finds
+-- nothing and the items are lost on rejoin.
 Players.PlayerRemoving:Connect(function(player)
-for placePart, entry in pairs(placedAtParts) do
-if entry.owner == player.UserId then
-if entry.model and entry.model.Parent then
-entry.model:Destroy()
-end
-if entry.prompt and entry.prompt.Parent then
-entry.prompt.ActionText = entry.origActionText
-entry.prompt.ObjectText = entry.origObjectText
-entry.prompt:SetAttribute("PlacedByUserId", nil)
-end
-placedAtParts[placePart] = nil
-end
-end
+	local userId = player.UserId
+	task.defer(function()
+		for placePart, entry in pairs(placedAtParts) do
+			if entry.owner == userId then
+				if entry.model and entry.model.Parent then
+					entry.model:Destroy()
+				end
+				if entry.prompt and entry.prompt.Parent then
+					entry.prompt.ActionText = entry.origActionText
+					entry.prompt.ObjectText = entry.origObjectText
+					entry.prompt:SetAttribute("PlacedByUserId", nil)
+				end
+				placedAtParts[placePart] = nil
+			end
+		end
+	end)
 end)
 
 print("[PlacementServer] Ready")
