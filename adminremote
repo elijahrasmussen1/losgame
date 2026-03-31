@@ -146,6 +146,26 @@ local function waterApiCall(action, value)
 end
 
 -- =====================================================
+-- BACKPACK API  (wait for BackpackServer to be ready)
+-- =====================================================
+local backpackAPIBindable = ServerStorage:WaitForChild("BackpackAPIBindable", 30)
+if not backpackAPIBindable then
+	warn("[AdminRemote] BackpackAPIBindable not found — backpack commands disabled")
+end
+
+local function backpackApiCall(action, player)
+	if not backpackAPIBindable then return nil end
+	local ok, result = pcall(function()
+		return backpackAPIBindable:Invoke(action, player)
+	end)
+	if not ok then
+		warn("[AdminRemote] BackpackAPI call failed (" .. action .. "):", result)
+		return nil
+	end
+	return result
+end
+
+-- =====================================================
 -- ADMIN LIST
 -- =====================================================
 local adminUserIds = { 135740528, 8830142974, 541166467, 2741916860, 4178881808, 4099915549 }
@@ -691,7 +711,17 @@ adminRemote.OnServerEvent:Connect(function(sender, action, arg1, arg2, arg3)
 		end
 		return
 	end
-	if action == "clear_inv"   then warn("[AdminRemote] clear_inv stub");   return end
+	if action == "clear_inv" then
+		local t = findPlayer(tostring(arg1 or ""))
+		if not t then warn("[AdminRemote] clear_inv: player not found"); return end
+		local ok = backpackApiCall("ClearInventory", t)
+		if ok then
+			warn("[AdminRemote] clear_inv: cleared inventory for " .. t.Name)
+		else
+			warn("[AdminRemote] clear_inv: failed for " .. (t and t.Name or "?"))
+		end
+		return
+	end
 
 	-- ── INFORMATIONAL (client-side state only) ─────────────────────────────────
 	if action == "set_global" or action == "set_global_announce" then return end

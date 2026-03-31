@@ -4,6 +4,9 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage     = game:GetService("ServerStorage")
 local Players           = game:GetService("Players")
+local DataStoreService  = game:GetService("DataStoreService")
+
+local backpackStore = DataStoreService:GetDataStore("PlayerBackpack_v1")
 
 local remotes = Instance.new("Folder")
 remotes.Name   = "BackpackRemotes"
@@ -114,6 +117,56 @@ local function getPlayerData(player)
 		playerData[player] = { items = {}, equipped = nil, hotbar = {} }
 	end
 	return playerData[player]
+end
+
+-- ── DataStore helpers ─────────────────────────────────────────────────────────
+local function loadPlayerData(player)
+	local ok, saved = pcall(function()
+		return backpackStore:GetAsync(tostring(player.UserId))
+	end)
+	if ok and type(saved) == "table" then
+		playerData[player] = {
+			items    = saved.items   or {},
+			equipped = nil,
+			hotbar   = saved.hotbar  or {},
+		}
+		print("[BackpackServer] Loaded data for", player.Name)
+	else
+		playerData[player] = { items = {}, equipped = nil, hotbar = {} }
+		if not ok then
+			warn("[BackpackServer] DataStore load failed for", player.Name, ":", saved)
+		end
+	end
+end
+
+local function savePlayerData(player)
+	local data = playerData[player]
+	if not data then return end
+
+	-- Collect any currently-placed items back into the data before saving
+	local retrievePlaced = placementBindables and placementBindables:FindFirstChild("RetrievePlacedItems")
+	if retrievePlaced then
+		local ok, placed = pcall(function() return retrievePlaced:Invoke(player) end)
+		if ok and type(placed) == "table" then
+			for _, item in ipairs(placed) do
+				local slot = nextFreeSlot(data)
+				if slot then
+					data.hotbar[slot] = item
+				end
+				table.insert(data.items, item)
+			end
+		end
+	end
+
+	local savePayload = { hotbar = data.hotbar, items = data.items }
+	local ok2, err = pcall(function()
+		backpackStore:SetAsync(tostring(player.UserId), savePayload)
+	end)
+	if ok2 then
+		print("[BackpackServer] Saved data for", player.Name)
+	else
+		warn("[BackpackServer] DataStore save failed for", player.Name, ":", err)
+	end
 end
 
 local function syncToClient(player)
@@ -279,6 +332,7 @@ end)
 
 -- ── Handle player death while carrying ───────────────────────────────────────
 Players.PlayerAdded:Connect(function(player)
+	loadPlayerData(player)
 	local data = getPlayerData(player)
 	ensureBackpackGloveInInventory(player)
 
@@ -383,6 +437,19 @@ Players.PlayerRemoving:Connect(function(player)
 			dropModel(model, refPos)
 		end)
 	end
+	-- Add any currently-carried model to inventory before saving
+	if model and model.Parent then
+		local data = getPlayerData(player)
+		local itemRecord = {
+			name      = model.Name,
+			icon      = model:GetAttribute("Icon") or "",
+			modelName = model.Name,
+		}
+		local slot = nextFreeSlot(data)
+		if slot then data.hotbar[slot] = itemRecord end
+		table.insert(data.items, itemRecord)
+	end
+	savePlayerData(player)
 	playerData[player]       = nil
 	carryingBrainrot[player] = nil
 	collectDebounce[player]  = nil
@@ -447,5 +514,61 @@ addItemFunc.OnInvoke = function(player, itemRecord)
 	end
 	syncToClient(player)
 end
+
+-- ── BackpackAPI BindableFunction (for AdminRemote and future tooling) ─────────
+-- Supported actions:
+--   "ClearInventory", player  — wipes all items except TOOL_ITEMS, then saves
+local backpackAPI        = Instance.new("BindableFunction")
+backpackAPI.Name         = "BackpackAPIBindable"
+backpackAPI.Parent       = ServerStorage
+backpackAPI.OnInvoke     = function(action, player)
+	if action == "ClearInventory" then
+		if not player then return false end
+		local data = getPlayerData(player)
+
+		-- Collect placed items first so they are also cleared (not kept in world)
+		local retrievePlaced = placementBindables:FindFirstChild("RetrievePlacedItems")
+		if retrievePlaced then
+			pcall(function() retrievePlaced:Invoke(player) end)
+		end
+
+		-- Remove everything that is not a tool
+		local keepItems  = {}
+		local keepHotbar = {}
+		for _, item in ipairs(data.items) do
+			if TOOL_ITEMS[item.name] or TOOL_ITEMS[item.modelName] then
+				table.insert(keepItems, item)
+			end
+		end
+		for slot, item in pairs(data.hotbar) do
+			if TOOL_ITEMS[item.name] or TOOL_ITEMS[item.modelName] then
+				keepHotbar[slot] = item
+			end
+		end
+
+		data.items   = keepItems
+		data.hotbar  = keepHotbar
+		data.equipped = nil
+
+		syncToClient(player)
+
+		-- Persist immediately
+		local savePayload = { hotbar = data.hotbar, items = data.items }
+		pcall(function()
+			backpackStore:SetAsync(tostring(player.UserId), savePayload)
+		end)
+
+		print("[BackpackServer] ClearInventory: cleared inventory for", player.Name)
+		return true
+	end
+	return false
+end
+
+-- ── Save all players on server shutdown ───────────────────────────────────────
+game:BindToClose(function()
+	for _, player in ipairs(Players:GetPlayers()) do
+		savePlayerData(player)
+	end
+end)
 
 print("[BackpackServer] Ready")
