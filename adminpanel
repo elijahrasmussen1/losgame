@@ -574,6 +574,7 @@ end
 -- =====================================================
 local PREDEFINED_ITEMS = {
 	"wavecoins",
+	"NoobiniCakenini",
 }
 
 local function attachItemDropdown(box, contentFrame)

@@ -78,6 +78,7 @@ local brainrotCollected = remotes:WaitForChild("BrainrotCollected")
 local equipToolRemote   = remotes:WaitForChild("EquipTool")
 local unequipToolRemote = remotes:WaitForChild("UnequipTool")
 local placeSlotRemote   = remotes:WaitForChild("PlaceSlotRemote")
+local rearrangeRemote   = remotes:WaitForChild("RearrangeBackpack")
 
 local modelsFolder = ReplicatedStorage:FindFirstChild("BrainrotModels")
 
@@ -432,7 +433,7 @@ UI.hotbarWrap = Instance.new("Frame")
 UI.hotbarWrap.Name = "HotbarWrap"; UI.hotbarWrap.AnchorPoint = Vector2.new(0.5,1)
 UI.hotbarWrap.Position = UDim2.new(0.5,0,1,-(BOTTOM_SAFE+2))
 UI.hotbarWrap.Size = UDim2.new(CFG.PANEL_W_SCALE,0,0,HOTBAR_H)
-UI.hotbarWrap.BackgroundColor3 = CFG.C_BG; UI.hotbarWrap.BackgroundTransparency = 0
+UI.hotbarWrap.BackgroundColor3 = CFG.C_BG; UI.hotbarWrap.BackgroundTransparency = 1
 UI.hotbarWrap.BorderSizePixel = 0; UI.hotbarWrap.Parent = mainGui
 mkCorner(UI.hotbarWrap, UDim.new(0,10))
 
@@ -462,7 +463,7 @@ numList.SortOrder = Enum.SortOrder.LayoutOrder; numList.Parent = UI.numRow
 UI.panel = Instance.new("Frame")
 UI.panel.Name = "Panel"; UI.panel.AnchorPoint = Vector2.new(0.5,1)
 UI.panel.Position = PANEL_HIDE; UI.panel.Size = UDim2.new(CFG.PANEL_W_SCALE,0,0,CFG.PANEL_H)
-UI.panel.BackgroundColor3 = CFG.C_BG; UI.panel.BackgroundTransparency = 0
+UI.panel.BackgroundColor3 = CFG.C_BG; UI.panel.BackgroundTransparency = 1
 UI.panel.BorderSizePixel = 0; UI.panel.Visible = false; UI.panel.Parent = mainGui
 mkCorner(UI.panel, UDim.new(0,10)); mkStroke(UI.panel, CFG.C_PANEL_BORDER, 1); mkPad(UI.panel, 8)
 
@@ -694,6 +695,7 @@ local function handleDrop(mp)
 		end
 	end
 	clearDrag(); rebuildUI()
+	rearrangeRemote:FireServer(State.hotbar)
 end
 
 rebuildHotbar = function()

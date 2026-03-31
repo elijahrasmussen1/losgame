@@ -40,6 +40,10 @@ local placeSlotRemote      = Instance.new("RemoteEvent")
 placeSlotRemote.Name       = "PlaceSlotRemote"
 placeSlotRemote.Parent     = remotes
 
+local rearrangeRemote      = Instance.new("RemoteEvent")
+rearrangeRemote.Name       = "RearrangeBackpack"
+rearrangeRemote.Parent     = remotes
+
 print("[BackpackServer] Remotes created")
 
 local playerData       = {}
@@ -56,6 +60,35 @@ local TOOL_ITEMS = {
 placeSlotRemote.OnServerEvent:Connect(function(player, slot)
 	if type(slot) == "number" and slot >= 0 and slot <= 10 then
 		pendingPlaceSlot[player] = (slot > 0) and slot or nil
+	end
+end)
+
+-- ── Sync client-side rearrangement (drag/drop) back to server ─────────────────
+rearrangeRemote.OnServerEvent:Connect(function(player, clientHotbar)
+	if type(clientHotbar) ~= "table" then return end
+	local data = getPlayerData(player)
+	-- Build a consumable pool from data.items keyed by name|modelName|level
+	local pool = {}
+	for _, item in ipairs(data.items) do
+		local key = (item.name or "") .. "|" .. (item.modelName or "") .. "|" .. tostring(item.level or 1)
+		if not pool[key] then pool[key] = {} end
+		table.insert(pool[key], item)
+	end
+	-- Rebuild hotbar to match client layout, consuming matching items from pool
+	local newHotbar = {}
+	for i = 1, 7 do
+		local sent = clientHotbar[i]
+		if sent and type(sent) == "table" then
+			local key = (sent.name or "") .. "|" .. (sent.modelName or "") .. "|" .. tostring(sent.level or 1)
+			if pool[key] and #pool[key] > 0 then
+				newHotbar[i] = table.remove(pool[key], 1)
+			end
+		end
+	end
+	data.hotbar = newHotbar
+	-- Update equipped slot if the item it referenced moved out of its slot
+	if data.equipped and not data.hotbar[data.equipped] then
+		data.equipped = nil
 	end
 end)
 
