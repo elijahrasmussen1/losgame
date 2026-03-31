@@ -23,31 +23,6 @@ end
 local removeEquippedFunc = placementBindables:WaitForChild("RemoveEquippedItem")
 local addItemFunc        = placementBindables:WaitForChild("AddItemToBackpack")
 
--- ── Expose RetrievePlacedItems so BackpackServer can collect items before saving ─
--- Returns a list of itemRecords for the given player, destroys their placed
--- models, and resets the prompts.  Called by BackpackServer on PlayerRemoving.
-local retrievePlacedFunc    = Instance.new("BindableFunction")
-retrievePlacedFunc.Name     = "RetrievePlacedItems"
-retrievePlacedFunc.Parent   = placementBindables
-retrievePlacedFunc.OnInvoke = function(player)
-	local collected = {}
-	for placePart, entry in pairs(placedAtParts) do
-		if entry.owner == player.UserId then
-			table.insert(collected, entry.item)
-			if entry.model and entry.model.Parent then
-				entry.model:Destroy()
-			end
-			if entry.prompt and entry.prompt.Parent then
-				entry.prompt.ActionText = entry.origActionText
-				entry.prompt.ObjectText = entry.origObjectText
-				entry.prompt:SetAttribute("PlacedByUserId", nil)
-			end
-			placedAtParts[placePart] = nil
-		end
-	end
-	return collected
-end
-
 -- ── Model template lookup ─────────────────────────────────────────────────────
 local modelsFolder = ReplicatedStorage:FindFirstChild("BrainrotModels")
 
@@ -75,6 +50,32 @@ end
 --          prompt=ProximityPrompt,
 --          origActionText=string, origObjectText=string }
 local placedAtParts = {}
+
+-- ── Expose RetrievePlacedItems so BackpackServer can collect items before saving ─
+-- Returns a list of itemRecords for the given player, destroys their placed
+-- models, and resets the prompts.  Called by BackpackServer on PlayerRemoving.
+-- IMPORTANT: must be defined AFTER placedAtParts so the closure captures it.
+local retrievePlacedFunc    = Instance.new("BindableFunction")
+retrievePlacedFunc.Name     = "RetrievePlacedItems"
+retrievePlacedFunc.Parent   = placementBindables
+retrievePlacedFunc.OnInvoke = function(player)
+	local collected = {}
+	for placePart, entry in pairs(placedAtParts) do
+		if entry.owner == player.UserId then
+			table.insert(collected, entry.item)
+			if entry.model and entry.model.Parent then
+				entry.model:Destroy()
+			end
+			if entry.prompt and entry.prompt.Parent then
+				entry.prompt.ActionText = entry.origActionText
+				entry.prompt.ObjectText = entry.origObjectText
+				entry.prompt:SetAttribute("PlacedByUserId", nil)
+			end
+			placedAtParts[placePart] = nil
+		end
+	end
+	return collected
+end
 
 -- ── Handle placement and pickup via the same prompt ───────────────────────────
 local hookedParts = {}
