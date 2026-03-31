@@ -139,12 +139,22 @@ local function loadPlayerData(player)
 	end
 end
 
+local function nextFreeSlot(data)
+	for i = 1, 10 do
+		if not data.hotbar[i] then return i end
+	end
+	return nil
+end
+
 local function savePlayerData(player)
 	local data = playerData[player]
 	if not data then return end
 
-	-- Collect any currently-placed items back into the data before saving
-	local retrievePlaced = placementBindables and placementBindables:FindFirstChild("RetrievePlacedItems")
+	-- Collect any currently-placed items back into the data before saving.
+	-- Look up PlacementBindables dynamically so this works regardless of
+	-- declaration order (avoids the forward-reference / nil-upvalue bug).
+	local pb = ServerStorage:FindFirstChild("PlacementBindables")
+	local retrievePlaced = pb and pb:FindFirstChild("RetrievePlacedItems")
 	if retrievePlaced then
 		local ok, placed = pcall(function() return retrievePlaced:Invoke(player) end)
 		if ok and type(placed) == "table" then
@@ -171,13 +181,6 @@ end
 
 local function syncToClient(player)
 	syncRemote:FireClient(player, getPlayerData(player))
-end
-
-local function nextFreeSlot(data)
-	for i = 1, 10 do
-		if not data.hotbar[i] then return i end
-	end
-	return nil
 end
 
 local function getRoot(model)
