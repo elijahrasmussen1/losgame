@@ -359,16 +359,19 @@ print("[PlacementServer] Hooked PlacePart:", placePart.Name)
 end
 
 -- ── Watch workspace for PlacePart(s) ─────────────────────────────────────────
+-- Matches "PlacePart", "PlacePart1Base1", "PlacePart2Base1", etc.
 local function checkInstance(obj)
-if obj.Name == "PlacePart" then
-setupPlacePart(obj)
-end
+	if typeof(obj) == "Instance" and string.sub(obj.Name, 1, 9) == "PlacePart" then
+		setupPlacePart(obj)
+	end
 end
 
-for _, child in ipairs(workspace:GetChildren()) do
-checkInstance(child)
+-- Scan all existing descendants (handles PlaceParts inside folder models like Base1Place)
+for _, desc in ipairs(workspace:GetDescendants()) do
+	checkInstance(desc)
 end
-workspace.ChildAdded:Connect(checkInstance)
+-- Watch for any new descendants added at any depth
+workspace.DescendantAdded:Connect(checkInstance)
 
 -- ── Placed items persist in the world when the owner leaves ──────────────────
 -- Models are NOT destroyed on PlayerRemoving.  BackpackServer saves placement
