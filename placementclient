@@ -2,56 +2,69 @@
 -- made by elijxhraz
 --
 -- Client-side placement support:
---   • Hides "Pick Up" proximity prompts on models placed by other players
---     so they appear non-interactive to everyone but the owner.
+--   • Monitors the "Place Brainrot" ProximityPrompt on every PlacePart.
+--   • When the server sets PlacedByUserId on that prompt (item placed),
+--     disables the prompt for any player who is NOT the owner so they
+--     cannot see or trigger the "Pick Up" interaction.
+--   • Re-enables the prompt for everyone when the item is picked up
+--     (PlacedByUserId cleared).
 
 local Players = game:GetService("Players")
 
 local player = Players.LocalPlayer
 
--- ── Handle a model that may be a placed item ──────────────────────────────────
-local function applyOwnershipToModel(model)
-	if not model:IsA("Model") and not model:IsA("BasePart") then return end
-
-	local placedBy = model:GetAttribute("PlacedBy")
-	if not placedBy then return end
-
-	local isOwner = (placedBy == player.UserId)
-
-	-- Disable "Pick Up" prompts for non-owners
-	local function checkPrompt(d)
-		if d:IsA("ProximityPrompt") and d.ActionText == "Pick Up" then
-			d.Enabled = isOwner
-		end
-	end
-
-	for _, d in ipairs(model:GetDescendants()) do
-		checkPrompt(d)
-	end
-
-	-- Also catch prompts added after the model arrives
-	model.DescendantAdded:Connect(function(d)
-		-- Re-read attribute in case it was set after parenting
-		local pb = model:GetAttribute("PlacedBy")
-		if d:IsA("ProximityPrompt") and d.ActionText == "Pick Up" then
-			d.Enabled = (pb == player.UserId)
-		end
-	end)
+-- ── Watch a single PlacePart prompt ──────────────────────────────────────────
+local function watchPrompt(prompt)
+local function refresh()
+local placedBy = prompt:GetAttribute("PlacedByUserId")
+if placedBy and placedBy ~= player.UserId then
+-- Occupied by someone else → hide the prompt locally
+prompt.Enabled = false
+else
+-- Empty slot OR I am the owner → show it
+prompt.Enabled = true
+end
 end
 
--- ── Watch workspace for newly placed models ───────────────────────────────────
+refresh()
+prompt:GetAttributeChangedSignal("PlacedByUserId"):Connect(refresh)
+end
+
+-- ── Watch a PlacePart for its prompts ─────────────────────────────────────────
+local hookedParts = {}
+
+local function watchPlacePart(placePart)
+if hookedParts[placePart] then return end
+hookedParts[placePart] = true
+
+-- Handle any existing prompts
+for _, d in ipairs(placePart:GetDescendants()) do
+if d:IsA("ProximityPrompt") then watchPrompt(d) end
+end
+if placePart:IsA("BasePart") then
+local p = placePart:FindFirstChildWhichIsA("ProximityPrompt")
+if p then watchPrompt(p) end
+end
+
+-- Handle prompts added later
+placePart.DescendantAdded:Connect(function(d)
+if d:IsA("ProximityPrompt") then watchPrompt(d) end
+end)
+end
+
+-- ── Watch workspace for PlacePart(s) ─────────────────────────────────────────
+local function checkInstance(obj)
+if obj.Name == "PlacePart" then watchPlacePart(obj) end
+end
+
 for _, child in ipairs(workspace:GetChildren()) do
-	applyOwnershipToModel(child)
+checkInstance(child)
 end
+workspace.ChildAdded:Connect(checkInstance)
 
-workspace.ChildAdded:Connect(applyOwnershipToModel)
-
--- Also handle children added to existing folders/models in workspace
--- (e.g. Brainrots folder or other containers)
+-- Also catch PlaceParts nested inside models or folders
 workspace.DescendantAdded:Connect(function(d)
-	if d:GetAttribute("PlacedBy") then
-		applyOwnershipToModel(d)
-	end
+if d.Name == "PlacePart" then watchPlacePart(d) end
 end)
 
 print("[PlacementClient] Ready")

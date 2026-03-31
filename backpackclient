@@ -77,6 +77,7 @@ local syncRemote        = remotes:WaitForChild("SyncBackpack")
 local brainrotCollected = remotes:WaitForChild("BrainrotCollected")
 local equipToolRemote   = remotes:WaitForChild("EquipTool")
 local unequipToolRemote = remotes:WaitForChild("UnequipTool")
+local placeSlotRemote   = remotes:WaitForChild("PlaceSlotRemote")
 
 local modelsFolder = ReplicatedStorage:FindFirstChild("BrainrotModels")
 
@@ -631,8 +632,10 @@ local rebuildHotbar, rebuildBag, rebuildUI
 local function handleSlotTap(hIdx, itm)
 	if State.equippedSlot == hIdx then
 		State.equippedSlot = nil; unequipRemote:FireServer(); detachEquipped()
+		placeSlotRemote:FireServer(0)
 	else
 		State.equippedSlot = hIdx; equipRemote:FireServer(hIdx); attachEquipped(itm)
+		placeSlotRemote:FireServer(hIdx)
 	end
 	rebuildHotbar()
 	if State.panelOpen then rebuildBag() end

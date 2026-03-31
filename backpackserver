@@ -33,11 +33,28 @@ local setCarryingRemote = Instance.new("RemoteEvent")
 setCarryingRemote.Name  = "SetCarrying"
 setCarryingRemote.Parent = remotes
 
+local placeSlotRemote      = Instance.new("RemoteEvent")
+placeSlotRemote.Name       = "PlaceSlotRemote"
+placeSlotRemote.Parent     = remotes
+
 print("[BackpackServer] Remotes created")
 
 local playerData       = {}
 local carryingBrainrot = {}
 local collectDebounce  = {}
+local pendingPlaceSlot = {}
+
+-- Items that are tools and cannot be placed in the world
+local TOOL_ITEMS = {
+	["BackpackGlove"] = true,
+}
+
+-- ── Track client-reported equipped slot for reliable placement ────────────────
+placeSlotRemote.OnServerEvent:Connect(function(player, slot)
+	if type(slot) == "number" and slot >= 0 and slot <= 10 then
+		pendingPlaceSlot[player] = (slot > 0) and slot or nil
+	end
+end)
 
 --------------------------------------------------------
 -- LOGICAL AUTO-GRANT OF BackpackGlove ON JOIN
@@ -369,6 +386,7 @@ Players.PlayerRemoving:Connect(function(player)
 	playerData[player]       = nil
 	carryingBrainrot[player] = nil
 	collectDebounce[player]  = nil
+	pendingPlaceSlot[player] = nil
 end)
 
 -- ── Placement integration ─────────────────────────────────────────────────────
@@ -379,15 +397,25 @@ placementBindables.Parent = ServerStorage
 
 -- RemoveEquippedItem(player) → itemRecord | nil
 -- Removes the currently equipped item from the player's backpack and returns it.
+-- Uses the client-reported slot (pendingPlaceSlot) for accuracy, falling back
+-- to the server-tracked equipped slot.
 local removeEquippedFunc      = Instance.new("BindableFunction")
 removeEquippedFunc.Name       = "RemoveEquippedItem"
 removeEquippedFunc.Parent     = placementBindables
 removeEquippedFunc.OnInvoke   = function(player)
 	local data = getPlayerData(player)
-	local slot = data.equipped
+	-- Prefer the slot the client explicitly reported (more reliable than data.equipped)
+	local slot = pendingPlaceSlot[player] or data.equipped
+	pendingPlaceSlot[player] = nil  -- consume after use
 	if not slot or not data.hotbar[slot] then return nil end
 
 	local item = data.hotbar[slot]
+
+	-- Do not allow placing tool items
+	if TOOL_ITEMS[item.name] or TOOL_ITEMS[item.modelName] then
+		print("[BackpackServer] Cannot place tool item:", item.name or item.modelName)
+		return nil
+	end
 
 	-- Remove from hotbar
 	data.hotbar[slot] = nil
