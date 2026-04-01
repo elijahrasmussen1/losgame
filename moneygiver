@@ -89,7 +89,7 @@ if CONFIG.ShowBillboard then
 	billboard.StudsOffset        = Vector3.new(0, 3.5, 0)
 	billboard.AlwaysOnTop        = true
 	billboard.ResetOnSpawn       = false
-	billboard.Enabled            = false   -- hidden until a brainrot is placed
+	billboard.Enabled            = true
 	billboard.Parent             = part
 	local lbl                    = Instance.new("TextLabel")
 	lbl.Size                     = UDim2.new(1, 0, 1, 0)
@@ -152,8 +152,6 @@ local placedCount = 0
 
 local function setCashPartActive(active)
 	part.CanTouch = active
-	local bb = part:FindFirstChildOfClass("BillboardGui")
-	if bb then bb.Enabled = active end
 end
 
 local function isPlacedBrainrot(obj)
@@ -197,24 +195,22 @@ end)
 -- No loop needed — we just read tick() on touch.
 -- =====================================================
 local playerLastCollect = {}   -- [userId] = tick() when they FIRST touched (nil = never touched)
-local playerTouching    = {}   -- [userId] = true while currently in contact with the part
+local playerTouchCount  = {}   -- [userId] = number of body parts currently in contact
 
 -- Clean up when a player leaves
 Players.PlayerRemoving:Connect(function(p)
 	playerLastCollect[p.UserId] = nil
-	playerTouching[p.UserId]    = nil
+	playerTouchCount[p.UserId]  = nil
 end)
 
--- =====================================================
--- TOUCH — collect everything accumulated since last touch
--- Only fires for the initial contact; player must leave
--- and re-touch to collect again.
--- =====================================================
+-- Roblox fires Touched/TouchEnded once PER body part, so we use a count.
+-- We only treat the transition from 0→1 as a real "new touch" event.
 part.TouchEnded:Connect(function(hit)
 	local char   = hit.Parent
 	local player = Players:GetPlayerFromCharacter(char)
 	if not player then return end
-	playerTouching[player.UserId] = nil
+	local uid = player.UserId
+	playerTouchCount[uid] = math.max(0, (playerTouchCount[uid] or 0) - 1)
 end)
 
 -- =====================================================
@@ -227,15 +223,18 @@ part.Touched:Connect(function(hit)
 	local player = Players:GetPlayerFromCharacter(char)
 	if not player then return end
 
-	-- Ignore repeated Touched events while the player is still in contact
-	if playerTouching[player.UserId] then return end
-	playerTouching[player.UserId] = true
+	local uid   = player.UserId
+	local prev  = playerTouchCount[uid] or 0
+	playerTouchCount[uid] = prev + 1
+
+	-- Only act on the first body part to make contact (0→1 transition)
+	if prev > 0 then return end
 
 	local now  = tick()
-	local last = playerLastCollect[player.UserId]
+	local last = playerLastCollect[uid]
 	if not last then
 		-- First touch: start the timer, no payout yet
-		playerLastCollect[player.UserId] = now
+		playerLastCollect[uid] = now
 		return
 	end
 
@@ -245,13 +244,13 @@ part.Touched:Connect(function(hit)
 
 	local payout = seconds * CONFIG.AccumulateRate
 	-- Reset the timer BEFORE the API call so concurrent touches don't double-pay
-	playerLastCollect[player.UserId] = now
+	playerLastCollect[uid] = now
 	billboardResetTime = now   -- reset the shared billboard counter
 
 	local ok = api:Invoke("AddCash", player, payout)
 	if not ok then
 		-- Restore the timer so the money isn't permanently lost
-		playerLastCollect[player.UserId] = last
+		playerLastCollect[uid] = last
 		return
 	end
 
