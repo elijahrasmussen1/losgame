@@ -87,7 +87,7 @@ if CONFIG.ShowBillboard then
 	local billboard              = Instance.new("BillboardGui")
 	billboard.Size               = UDim2.new(0, 200, 0, 70)
 	billboard.StudsOffset        = Vector3.new(0, 3.5, 0)
-	billboard.AlwaysOnTop        = false
+	billboard.AlwaysOnTop        = true
 	billboard.ResetOnSpawn       = false
 	billboard.Enabled            = false   -- hidden until a brainrot is placed
 	billboard.Parent             = part
@@ -197,10 +197,24 @@ end)
 -- No loop needed — we just read tick() on touch.
 -- =====================================================
 local playerLastCollect = {}   -- [userId] = tick() when they FIRST touched (nil = never touched)
+local playerTouching    = {}   -- [userId] = true while currently in contact with the part
 
 -- Clean up when a player leaves
 Players.PlayerRemoving:Connect(function(p)
 	playerLastCollect[p.UserId] = nil
+	playerTouching[p.UserId]    = nil
+end)
+
+-- =====================================================
+-- TOUCH — collect everything accumulated since last touch
+-- Only fires for the initial contact; player must leave
+-- and re-touch to collect again.
+-- =====================================================
+part.TouchEnded:Connect(function(hit)
+	local char   = hit.Parent
+	local player = Players:GetPlayerFromCharacter(char)
+	if not player then return end
+	playerTouching[player.UserId] = nil
 end)
 
 -- =====================================================
@@ -212,6 +226,10 @@ part.Touched:Connect(function(hit)
 	local char   = hit.Parent
 	local player = Players:GetPlayerFromCharacter(char)
 	if not player then return end
+
+	-- Ignore repeated Touched events while the player is still in contact
+	if playerTouching[player.UserId] then return end
+	playerTouching[player.UserId] = true
 
 	local now  = tick()
 	local last = playerLastCollect[player.UserId]
