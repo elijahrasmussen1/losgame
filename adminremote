@@ -695,8 +695,9 @@ adminRemote.OnServerEvent:Connect(function(sender, action, arg1, arg2, arg3)
 		local itemName = tostring(arg2 or ""):lower()
 		if not t then warn("[AdminRemote] give_item: player not found"); return end
 		if itemName == "wavecoins" then
-			local newBal = waveCoinApiCall("AddCoins", t, 10)
-			warn(string.format("[AdminRemote] give_item wavecoins: +10 → %s (balance=%s)", t.Name, tostring(newBal)))
+			local amount = tonumber(arg3) or 10
+			local newBal = waveCoinApiCall("AddCoins", t, amount)
+			warn(string.format("[AdminRemote] give_item wavecoins: +%s → %s (balance=%s)", tostring(amount), t.Name, tostring(newBal)))
 		elseif itemName == "noobinicakenini" then
 			if addItemToBackpack then
 				local record = {name="NoobiniCakenini", modelName="NoobiniCakenini", level=1}
@@ -719,8 +720,9 @@ adminRemote.OnServerEvent:Connect(function(sender, action, arg1, arg2, arg3)
 		local itemName = tostring(arg2 or ""):lower()
 		if not t then warn("[AdminRemote] remove_item: player not found"); return end
 		if itemName == "wavecoins" then
-			local newBal = waveCoinApiCall("AddCoins", t, -10)
-			warn(string.format("[AdminRemote] remove_item wavecoins: -10 → %s (balance=%s)", t.Name, tostring(newBal)))
+			local amount = tonumber(arg3) or 10
+			local newBal = waveCoinApiCall("AddCoins", t, -amount)
+			warn(string.format("[AdminRemote] remove_item wavecoins: -%s → %s (balance=%s)", tostring(amount), t.Name, tostring(newBal)))
 		else
 			warn("[AdminRemote] remove_item: unknown item '" .. itemName .. "'")
 		end

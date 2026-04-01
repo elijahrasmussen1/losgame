@@ -1769,26 +1769,38 @@ do
 	mkCorner(itmInput,UDim.new(0,4)); mkStroke(itmInput,C.inputBdr,1)
 	attachItemDropdown(itmInput,page)
 
+	mkSectionLabel(page,"WAVECOIN AMT",142)
+	local wcAmt=Instance.new("TextBox")
+	wcAmt.Size=UDim2.new(1,-PAD*2,0,32); wcAmt.Position=UDim2.new(0,PAD,0,166)
+	wcAmt.BackgroundColor3=C.inputBg; wcAmt.BorderSizePixel=0
+	wcAmt.PlaceholderText="Amount (default 10, wavecoins only)"; wcAmt.PlaceholderColor3=C.phCol
+	wcAmt.Text=""; wcAmt.TextColor3=C.inputText; wcAmt.Font=Enum.Font.Gotham
+	wcAmt.TextSize=13; wcAmt.TextXAlignment=Enum.TextXAlignment.Center
+	wcAmt.ClearTextOnFocus=false; wcAmt.ZIndex=5; wcAmt.Parent=page
+	mkCorner(wcAmt,UDim.new(0,4)); mkStroke(wcAmt,C.inputBdr,1)
+
 	local HALF=math.floor((CW-6)/2)
-	mkBtn(page,"GIVE ITEM",C.btnGreen,C.btnGreenDk,HALF,36,PAD,146,function()
+	mkBtn(page,"GIVE ITEM",C.btnGreen,C.btnGreenDk,HALF,36,PAD,210,function()
 		local u=itmPlayer.Text:match("^%s*(.-)%s*$"); local itm=itmInput.Text:match("^%s*(.-)%s*$")
+		local amt=tonumber(wcAmt.Text:match("^%s*(.-)%s*$")) or 10
 		if u=="" then showToast("Enter player name") return end
 		if itm=="" then showToast("Enter item name") return end
-		adminRemote:FireServer("give_item",u,itm); showFeedback("Gave "..itm.." to "..u)
+		adminRemote:FireServer("give_item",u,itm,amt); showFeedback("Gave "..itm.." to "..u)
 	end)
-	mkBtn(page,"REMOVE ITEM",C.btnRed,C.btnRedDk,HALF,36,PAD+HALF+6,146,function()
+	mkBtn(page,"REMOVE ITEM",C.btnRed,C.btnRedDk,HALF,36,PAD+HALF+6,210,function()
 		local u=itmPlayer.Text:match("^%s*(.-)%s*$"); local itm=itmInput.Text:match("^%s*(.-)%s*$")
+		local amt=tonumber(wcAmt.Text:match("^%s*(.-)%s*$")) or 10
 		if u=="" then showToast("Enter player name") return end
 		if itm=="" then showToast("Enter item name") return end
-		adminRemote:FireServer("remove_item",u,itm); showFeedback("Removed "..itm.." from "..u)
+		adminRemote:FireServer("remove_item",u,itm,amt); showFeedback("Removed "..itm.." from "..u)
 	end)
-	mkBtn(page,"CLEAR INVENTORY",C.btnOrange,C.btnOrangeDk,CW,36,PAD,190,function()
+	mkBtn(page,"CLEAR INVENTORY",C.btnOrange,C.btnOrangeDk,CW,36,PAD,254,function()
 		local u=itmPlayer.Text:match("^%s*(.-)%s*$")
 		if u=="" then showToast("Enter player name") return end
 		adminRemote:FireServer("clear_inv",u); showFeedback("Cleared inventory of "..u)
 	end)
 
-	mkSectionLabel(page,"MODERATION",238)
+	mkSectionLabel(page,"MODERATION",302)
 	local MCOLS=5
 	local MBTNS={
 		{"KICK",C.btnOlive,C.btnOliveDk,function() openKickGui() end},
@@ -1799,7 +1811,7 @@ do
 	}
 	local mBW=math.floor((CW-(MCOLS-1)*5)/MCOLS)
 	for i,info in ipairs(MBTNS) do
-		mkBtn(page,info[1],info[2],info[3],mBW,32,PAD+(i-1)*(mBW+5),262,info[4])
+		mkBtn(page,info[1],info[2],info[3],mBW,32,PAD+(i-1)*(mBW+5),326,info[4])
 	end
 end
 
