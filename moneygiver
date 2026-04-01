@@ -10,7 +10,7 @@ local TweenService  = game:GetService("TweenService")
 -- =====================================================
 local CONFIG = {
 	PartName        = "CashPart",
-	AccumulateRate  = 1,   -- $ added to the pot every second
+	AccumulateRate  = 1,   -- $ per second per player (time-based, no loop needed)
 	ShowBillboard   = true,
 	SoundId         = "rbxassetid://6042053626",
 	SoundVolume     = 0.6,
@@ -83,7 +83,6 @@ if CONFIG.PartColour   then part.Color      = CONFIG.PartColour   end
 part.CanTouch = false
 
 -- Billboard
-local billboardLabel
 if CONFIG.ShowBillboard then
 	local billboard              = Instance.new("BillboardGui")
 	billboard.Size               = UDim2.new(0, 180, 0, 50)
@@ -95,14 +94,13 @@ if CONFIG.ShowBillboard then
 	local lbl                    = Instance.new("TextLabel")
 	lbl.Size                     = UDim2.new(1, 0, 1, 0)
 	lbl.BackgroundTransparency   = 1
-	lbl.Text                     = "$0"
+	lbl.Text                     = "$" .. CONFIG.AccumulateRate .. "/sec — Touch to Collect"
 	lbl.TextColor3               = Color3.fromRGB(80, 255, 100)
 	lbl.TextStrokeColor3         = Color3.fromRGB(0, 0, 0)
 	lbl.TextStrokeTransparency   = 0.4
 	lbl.Font                     = Enum.Font.GothamBlack
 	lbl.TextScaled               = true
 	lbl.Parent                   = billboard
-	billboardLabel               = lbl
 end
 
 -- Sound
@@ -135,9 +133,8 @@ local placedCount = 0
 
 local function setCashPartActive(active)
 	part.CanTouch = active
-	if billboardLabel then
-		billboardLabel.Parent.Enabled = active
-	end
+	local bb = part:FindFirstChildOfClass("BillboardGui")
+	if bb then bb.Enabled = active end
 end
 
 local function isPlacedBrainrot(obj)
@@ -173,50 +170,55 @@ workspace.DescendantRemoving:Connect(function(obj)
 end)
 
 -- =====================================================
--- ACCUMULATOR
--- Builds up $AccumulateRate every second.
--- Touching the part collects everything accumulated.
+-- PER-PLAYER TIME-BASED ACCUMULATION
+-- Each player earns $AccumulateRate per second while at
+-- least one brainrot is placed.  Touching the part
+-- collects all built-up money (floor of elapsed seconds
+-- × rate) and resets the player's personal timer.
+-- No loop needed — we just read tick() on touch.
 -- =====================================================
-local accumulated = 0
+local playerLastCollect = {}   -- [userId] = tick() when timer last reset
 
-task.spawn(function()
-	while true do
-		task.wait(1)
-		if placedCount > 0 then
-			accumulated += CONFIG.AccumulateRate
-			if billboardLabel then
-				billboardLabel.Text = formatCash(accumulated)
-			end
-		end
-	end
+-- Seed any players already in the game when this script runs
+for _, p in ipairs(Players:GetPlayers()) do
+	playerLastCollect[p.UserId] = tick()
+end
+Players.PlayerAdded:Connect(function(p)
+	playerLastCollect[p.UserId] = tick()
+end)
+Players.PlayerRemoving:Connect(function(p)
+	playerLastCollect[p.UserId] = nil
 end)
 
 -- =====================================================
--- TOUCH — collect everything accumulated
+-- TOUCH — collect everything accumulated since last touch
 -- =====================================================
-local collecting = {}   -- debounce per player (one payout per landing)
-Players.PlayerRemoving:Connect(function(p) collecting[p.UserId] = nil end)
-
 part.Touched:Connect(function(hit)
 	if placedCount == 0 then return end
-	if accumulated <= 0 then return end
 
 	local char   = hit.Parent
 	local player = Players:GetPlayerFromCharacter(char)
 	if not player then return end
-	if collecting[player.UserId] then return end
-	collecting[player.UserId] = true
-	task.delay(0.5, function() collecting[player.UserId] = nil end)
 
-	local payout  = accumulated
-	accumulated   = 0
-	if billboardLabel then billboardLabel.Text = formatCash(0) end
+	local now  = tick()
+	local last = playerLastCollect[player.UserId]
+	if not last then
+		playerLastCollect[player.UserId] = now
+		return
+	end
+
+	-- Only pay out whole seconds worth of accumulation
+	local seconds = math.floor(now - last)
+	if seconds < 1 then return end   -- less than $1 built up — skip silently
+
+	local payout = seconds * CONFIG.AccumulateRate
+	-- Reset the timer BEFORE the API call so concurrent touches don't double-pay
+	playerLastCollect[player.UserId] = now
 
 	local ok = api:Invoke("AddCash", player, payout)
 	if not ok then
-		-- refund if the API failed
-		accumulated = payout
-		if billboardLabel then billboardLabel.Text = formatCash(accumulated) end
+		-- Restore the timer so the money isn't permanently lost
+		playerLastCollect[player.UserId] = last
 		return
 	end
 
@@ -228,5 +230,5 @@ part.Touched:Connect(function(hit)
 	if sound then sound:Play() end
 end)
 
-print(string.format("[MoneyGiver] Ready — accumulates %s/s, collected on touch",
+print(string.format("[MoneyGiver] Ready — %s/s per player, collected on touch",
 	formatCash(CONFIG.AccumulateRate)))
