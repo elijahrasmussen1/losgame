@@ -195,26 +195,25 @@ end)
 -- No loop needed — we just read tick() on touch.
 -- =====================================================
 local playerLastCollect = {}   -- [userId] = tick() when they FIRST touched (nil = never touched)
-local playerTouchCount  = {}   -- [userId] = number of body parts currently in contact
+local playerInContact   = {}   -- [userId] = true while player is inside/near the part
 
 -- Clean up when a player leaves
 Players.PlayerRemoving:Connect(function(p)
 	playerLastCollect[p.UserId] = nil
-	playerTouchCount[p.UserId]  = nil
+	playerInContact[p.UserId]   = nil
 end)
 
--- Roblox fires Touched/TouchEnded once PER body part, so we use a count.
--- We only treat the transition from 0→1 as a real "new touch" event.
-part.TouchEnded:Connect(function(hit)
-	local char   = hit.Parent
-	local player = Players:GetPlayerFromCharacter(char)
-	if not player then return end
-	local uid = player.UserId
-	playerTouchCount[uid] = math.max(0, (playerTouchCount[uid] or 0) - 1)
-end)
+-- EXIT_RADIUS: how far (studs from part centre) the player's HRP must be
+-- before we consider them "away" and allow the next collection trigger.
+-- Part diameter = 4 → radius = 2; add 5-stud buffer = 7 total.
+local EXIT_RADIUS = part.Size.X + 5
 
 -- =====================================================
 -- TOUCH — collect everything accumulated since last touch
+-- We use a per-player polling loop (checks HRP distance
+-- every 0.1 s) to detect departure instead of relying on
+-- TouchEnded, which fires asymmetrically for non-collidable
+-- parts and causes the in-contact flag to get stuck.
 -- =====================================================
 part.Touched:Connect(function(hit)
 	if placedCount == 0 then return end
@@ -223,12 +222,20 @@ part.Touched:Connect(function(hit)
 	local player = Players:GetPlayerFromCharacter(char)
 	if not player then return end
 
-	local uid   = player.UserId
-	local prev  = playerTouchCount[uid] or 0
-	playerTouchCount[uid] = prev + 1
+	local uid = player.UserId
+	if playerInContact[uid] then return end   -- already inside, ignore repeat events
+	playerInContact[uid] = true
 
-	-- Only act on the first body part to make contact (0→1 transition)
-	if prev > 0 then return end
+	-- Spawn a watcher that clears the flag once the player moves away
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	task.spawn(function()
+		while playerInContact[uid] do
+			task.wait(0.1)
+			if not hrp or not hrp.Parent then break end
+			if (hrp.Position - part.Position).Magnitude > EXIT_RADIUS then break end
+		end
+		playerInContact[uid] = nil
+	end)
 
 	local now  = tick()
 	local last = playerLastCollect[uid]
