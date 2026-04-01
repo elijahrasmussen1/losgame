@@ -85,7 +85,7 @@ part.CanTouch = false
 -- Billboard
 if CONFIG.ShowBillboard then
 	local billboard              = Instance.new("BillboardGui")
-	billboard.Size               = UDim2.new(0, 180, 0, 50)
+	billboard.Size               = UDim2.new(0, 200, 0, 70)
 	billboard.StudsOffset        = Vector3.new(0, 3.5, 0)
 	billboard.AlwaysOnTop        = false
 	billboard.ResetOnSpawn       = false
@@ -94,7 +94,7 @@ if CONFIG.ShowBillboard then
 	local lbl                    = Instance.new("TextLabel")
 	lbl.Size                     = UDim2.new(1, 0, 1, 0)
 	lbl.BackgroundTransparency   = 1
-	lbl.Text                     = "$" .. CONFIG.AccumulateRate .. "/sec — Touch to Collect"
+	lbl.Text                     = "$" .. CONFIG.AccumulateRate .. "/sec\n$0 built up"
 	lbl.TextColor3               = Color3.fromRGB(87, 255, 41)
 	lbl.TextStrokeColor3         = Color3.fromRGB(0, 0, 0)
 	lbl.TextStrokeTransparency   = 0.4
@@ -103,7 +103,26 @@ if CONFIG.ShowBillboard then
 	lbl.Parent                   = billboard
 end
 
--- Sound
+-- Global reference for the billboard "built up" counter
+local billboardResetTime = tick()
+
+-- Billboard update loop — shows rate + growing amount
+if CONFIG.ShowBillboard then
+	task.spawn(function()
+		while true do
+			task.wait(0.5)
+			local bb = part:FindFirstChildOfClass("BillboardGui")
+			if bb and bb.Enabled then
+				local lbl = bb:FindFirstChildOfClass("TextLabel")
+				if lbl then
+					local built = math.floor(tick() - billboardResetTime) * CONFIG.AccumulateRate
+					lbl.Text = "$" .. CONFIG.AccumulateRate .. "/sec\n" .. formatCash(built) .. " built up"
+				end
+			end
+		end
+	end)
+end
+
 local sound
 if CONFIG.SoundId and CONFIG.SoundId ~= "" then
 	sound                    = Instance.new("Sound")
@@ -177,15 +196,9 @@ end)
 -- × rate) and resets the player's personal timer.
 -- No loop needed — we just read tick() on touch.
 -- =====================================================
-local playerLastCollect = {}   -- [userId] = tick() when timer last reset
+local playerLastCollect = {}   -- [userId] = tick() when they FIRST touched (nil = never touched)
 
--- Seed any players already in the game when this script runs
-for _, p in ipairs(Players:GetPlayers()) do
-	playerLastCollect[p.UserId] = tick()
-end
-Players.PlayerAdded:Connect(function(p)
-	playerLastCollect[p.UserId] = tick()
-end)
+-- Clean up when a player leaves
 Players.PlayerRemoving:Connect(function(p)
 	playerLastCollect[p.UserId] = nil
 end)
@@ -203,6 +216,7 @@ part.Touched:Connect(function(hit)
 	local now  = tick()
 	local last = playerLastCollect[player.UserId]
 	if not last then
+		-- First touch: start the timer, no payout yet
 		playerLastCollect[player.UserId] = now
 		return
 	end
@@ -214,6 +228,7 @@ part.Touched:Connect(function(hit)
 	local payout = seconds * CONFIG.AccumulateRate
 	-- Reset the timer BEFORE the API call so concurrent touches don't double-pay
 	playerLastCollect[player.UserId] = now
+	billboardResetTime = now   -- reset the shared billboard counter
 
 	local ok = api:Invoke("AddCash", player, payout)
 	if not ok then
