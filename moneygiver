@@ -95,10 +95,10 @@ if CONFIG.ShowBillboard then
 	lbl.Size                     = UDim2.new(1, 0, 1, 0)
 	lbl.BackgroundTransparency   = 1
 	lbl.Text                     = "$" .. CONFIG.AccumulateRate .. "/sec — Touch to Collect"
-	lbl.TextColor3               = Color3.fromRGB(80, 255, 100)
+	lbl.TextColor3               = Color3.fromRGB(87, 255, 41)
 	lbl.TextStrokeColor3         = Color3.fromRGB(0, 0, 0)
 	lbl.TextStrokeTransparency   = 0.4
-	lbl.Font                     = Enum.Font.GothamBlack
+	lbl.Font                     = Enum.Font.MontserratExtraBold
 	lbl.TextScaled               = true
 	lbl.Parent                   = billboard
 end
