@@ -76,31 +76,73 @@ local function spawnCharacter(cfg)
 	local pos   = cfg.positions[math.random(1, #cfg.positions)]
 	local clone = cfg.template:Clone()
 	clone:SetAttribute(SPAWNER_TAG, true)
+
+	-- Anchor every BasePart before parenting so physics can't scatter the model
+	-- while it is being positioned.
+	for _, d in ipairs(clone:GetDescendants()) do
+		if d:IsA("BasePart") then
+			d.Anchored = true
+		end
+	end
+	if clone:IsA("BasePart") then
+		clone.Anchored = true
+	end
+
 	clone.Parent = workspace
 
+	-- PivotTo moves ALL anchored descendants together as one rigid unit.
+	-- It works even when PrimaryPart is not set.
 	if clone:IsA("Model") then
-		if clone.PrimaryPart then
-			clone:SetPrimaryPartCFrame(CFrame.new(pos))
-		else
-			warn("[Spawner] ⚠️ " .. cfg.name .. " has no PrimaryPart! Falling back to MoveTo.")
-			clone:MoveTo(pos)
-		end
+		clone:PivotTo(CFrame.new(pos))
 	elseif clone:IsA("BasePart") then
 		clone.Position = pos
 	end
 
-	-- DEBUG: print Y positions of all parts
-	task.defer(function()
-		if not (clone and clone.Parent) then return end
-		for _, d in ipairs(clone:GetDescendants()) do
-			if d:IsA("BasePart") then
-				print("[Spawner] " .. d.Name .. " Y=" .. tostring(d.Position.Y))
+	-- Ensure all parts are welded to a single root so the model stays together
+	-- when carried (carry client moves root.CFrame; welded parts follow).
+	if clone:IsA("Model") then
+		local root = clone:FindFirstChild("Root", true)
+			or clone.PrimaryPart
+			or clone:FindFirstChildWhichIsA("MeshPart", true)
+			or clone:FindFirstChildWhichIsA("BasePart", true)
+
+		if root then
+			-- Build a set of BaseParts already connected to root via any Weld/WeldConstraint
+			local connected = {}
+			for _, d in ipairs(clone:GetDescendants()) do
+				if d:IsA("Weld") or d:IsA("WeldConstraint") then
+					if d.Part0 == root then connected[d.Part1] = true end
+					if d.Part1 == root then connected[d.Part0] = true end
+				end
+			end
+
+			-- Create WeldConstraints for any part not yet connected to root
+			for _, d in ipairs(clone:GetDescendants()) do
+				if d:IsA("BasePart") and d ~= root and not connected[d] then
+					local wc = Instance.new("WeldConstraint")
+					wc.Part0 = root
+					wc.Part1 = d
+					wc.Parent = root
+				end
+			end
+
+			-- Unanchor all parts so the client can have network ownership of root
+			-- (needed for carry's client-side CFrame replication to other players).
+			-- The model will rest on the ground naturally via physics.
+			for _, d in ipairs(clone:GetDescendants()) do
+				if d:IsA("BasePart") then
+					d.Anchored = false
+				end
+			end
+			root.Anchored = false
+		else
+			warn("[Spawner] ⚠️ " .. cfg.name .. " has no BasePart to use as root!")
+			-- Still unanchor in the fallback case
+			for _, d in ipairs(clone:GetDescendants()) do
+				if d:IsA("BasePart") then d.Anchored = false end
 			end
 		end
-		if clone:IsA("BasePart") then
-			print("[Spawner] " .. clone.Name .. " Y=" .. tostring(clone.Position.Y))
-		end
-	end)
+	end
 
 	print("[Spawner] ✅ Spawned " .. cfg.name .. " at " .. tostring(pos))
 end
