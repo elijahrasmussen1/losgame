@@ -146,21 +146,25 @@ local function spawnCharacter(cfg)
 				end
 			end
 
-			-- Unanchor all parts so the client can have network ownership of root
-			-- (needed for carry's client-side CFrame replication to other players).
-			-- The model will rest on the ground naturally via physics.
+			-- Add a ProximityPrompt to root if the model has none.
+			-- The carry client requires a ProximityPrompt to hook the pickup trigger.
+			local hasPrompt = false
 			for _, d in ipairs(clone:GetDescendants()) do
-				if d:IsA("BasePart") then
-					d.Anchored = false
-				end
+				if d:IsA("ProximityPrompt") then hasPrompt = true; break end
 			end
-			root.Anchored = false
+			if not hasPrompt then
+				local pp = Instance.new("ProximityPrompt")
+				pp.ActionText    = "Pick Up"
+				pp.ObjectText    = clone.Name
+				pp.MaxActivationDistance = 10
+				pp.Parent        = root
+			end
+
+			-- Keep all parts ANCHORED so the model stays in place on the ground.
+			-- The SetCarrying server handler unanchors and hands network ownership
+			-- to the player when they pick it up; dropModel re-anchors on drop.
 		else
 			warn("[Spawner] ⚠️ " .. cfg.name .. " has no BasePart to use as root!")
-			-- Still unanchor in the fallback case
-			for _, d in ipairs(clone:GetDescendants()) do
-				if d:IsA("BasePart") then d.Anchored = false end
-			end
 		end
 	end
 
