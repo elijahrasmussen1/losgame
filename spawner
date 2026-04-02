@@ -144,6 +144,27 @@ local function spawnCharacter(cfg)
 		end
 	end
 
+	-- Ensure a ProximityPrompt exists so the carry client can show the input UI.
+	-- The carry client (hookModel) requires one to be present in the model's
+	-- descendants; without it the carry input never appears.
+	if clone:IsA("Model") then
+		local existingPrompt = clone:FindFirstChildWhichIsA("ProximityPrompt", true)
+		if not existingPrompt then
+			local root = clone:FindFirstChild("Root", true)
+				or clone.PrimaryPart
+				or clone:FindFirstChildWhichIsA("MeshPart", true)
+				or clone:FindFirstChildWhichIsA("BasePart", true)
+			if root then
+				local pp = Instance.new("ProximityPrompt")
+				pp.ActionText   = "Carry"
+				pp.ObjectText   = cfg.name
+				pp.HoldDuration = 0
+				pp.MaxActivationDistance = 10
+				pp.Parent = root
+			end
+		end
+	end
+
 	print("[Spawner] ✅ Spawned " .. cfg.name .. " at " .. tostring(pos))
 end
 
