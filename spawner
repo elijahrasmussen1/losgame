@@ -1,0 +1,142 @@
+-- ServerScriptService/NoobiniSpawner.server.lua
+-- made by elijxhraz
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerStorage     = game:GetService("ServerStorage")
+
+local ROLL_INTERVAL = 3
+
+local CHARACTERS = {
+	{
+		name        = "NoobiniCakenini",
+		spawnChance = 10,
+		positions   = {
+			Vector3.new(889.928, -4.992, -574.956),
+			Vector3.new(868.196, -4.082, -552.956),
+		},
+	},
+	{
+		name        = "Allesina",
+		spawnChance = 10,
+		positions   = {
+			Vector3.new(881.117, -1.0, -639.078),
+		},
+	},
+}
+
+-- ── Load templates ────────────────────────────────────────────────────────────
+for _, cfg in ipairs(CHARACTERS) do
+	local t = ServerStorage:FindFirstChild(cfg.name)
+	if t then
+		cfg.template = t
+		print("[Spawner] ✅ Loaded: " .. cfg.name .. " (class: " .. t.ClassName .. ")")
+	else
+		warn("[Spawner] ❌ MISSING in ServerStorage: '" .. cfg.name .. "'")
+	end
+end
+
+-- ── Timer remote ──────────────────────────────────────────────────────────────
+local timerEvent = ReplicatedStorage:WaitForChild("TimerEvent", 15)
+if not timerEvent then
+	warn("[Spawner] ❌ Could not find TimerEvent!")
+	return
+end
+
+local SPAWNER_TAG = "__SpawnerOwned"
+
+local function isAlive(cfg)
+	for _, child in ipairs(workspace:GetChildren()) do
+		if child.Name == cfg.name and child:GetAttribute(SPAWNER_TAG) then
+			return true
+		end
+	end
+	return false
+end
+
+local function spawnCharacter(cfg)
+	if not cfg.template then
+		warn("[Spawner] No template for " .. cfg.name)
+		return
+	end
+	if isAlive(cfg) then
+		return
+	end
+
+	local pos   = cfg.positions[math.random(1, #cfg.positions)]
+	local clone = cfg.template:Clone()
+	clone:SetAttribute(SPAWNER_TAG, true)
+	clone.Parent = workspace
+
+	if clone:IsA("Model") then
+		if clone.PrimaryPart then
+			clone:SetPrimaryPartCFrame(CFrame.new(pos))
+		else
+			warn("[Spawner] ⚠️ " .. cfg.name .. " has no PrimaryPart! Falling back to MoveTo.")
+			clone:MoveTo(pos)
+		end
+	elseif clone:IsA("BasePart") then
+		clone.Position = pos
+	end
+
+	-- DEBUG: print Y positions of all parts
+	task.defer(function()
+		if not (clone and clone.Parent) then return end
+		for _, d in ipairs(clone:GetDescendants()) do
+			if d:IsA("BasePart") then
+				print("[Spawner] " .. d.Name .. " Y=" .. tostring(d.Position.Y))
+			end
+		end
+		if clone:IsA("BasePart") then
+			print("[Spawner] " .. clone.Name .. " Y=" .. tostring(clone.Position.Y))
+		end
+	end)
+
+	print("[Spawner] ✅ Spawned " .. cfg.name .. " at " .. tostring(pos))
+end
+
+local function despawnCharacter(cfg)
+	for _, child in ipairs(workspace:GetChildren()) do
+		if child.Name == cfg.name and child:GetAttribute(SPAWNER_TAG) then
+			child:Destroy()
+			print("[Spawner] ❌ Despawned " .. cfg.name)
+		end
+	end
+end
+
+-- ── BindableEvent bridge ──────────────────────────────────────────────────────
+local timerEndedEvent = ReplicatedStorage:FindFirstChild("TimerEndedBridge")
+if not timerEndedEvent then
+	timerEndedEvent        = Instance.new("BindableEvent")
+	timerEndedEvent.Name   = "TimerEndedBridge"
+	timerEndedEvent.Parent = ReplicatedStorage
+end
+
+timerEndedEvent.Event:Connect(function()
+	for _, cfg in ipairs(CHARACTERS) do
+		despawnCharacter(cfg)
+	end
+end)
+
+-- ── Roll loop ─────────────────────────────────────────────────────────────────
+task.spawn(function()
+	task.wait(2)
+	print("[Spawner] Roll loop started.")
+
+	while true do
+		task.wait(ROLL_INTERVAL)
+
+		for _, cfg in ipairs(CHARACTERS) do
+			if isAlive(cfg) then
+				print("[Spawner] ⏳ " .. cfg.name .. " already active")
+			else
+				local roll = math.random(1, 10)
+				print("[Spawner] 🎲 " .. cfg.name .. " rolled " .. roll .. " / need <= " .. cfg.spawnChance)
+				if roll <= cfg.spawnChance then
+					spawnCharacter(cfg)
+				end
+			end
+		end
+	end
+end)
+
+print("[Spawner] Running — rolling every " .. ROLL_INTERVAL .. "s")
