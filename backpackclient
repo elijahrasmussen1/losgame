@@ -89,6 +89,7 @@ local ICON_OVERRIDES = {
 	["NoobiniCakenini"] = "rbxassetid://139682046905729",
 	["Allesina"]        = "rbxassetid://76770369547729",
 	["BackpackGlove"]   = "rbxassetid://126510061288640",
+	-- ["ChillinChilitos"] = "rbxassetid://REPLACE_WITH_ASSET_ID",
 }
 
 local OVERRIDE_ICON_SCALE  = 0.78

@@ -2029,7 +2029,7 @@ do
 	end
 end
 
--- ── MISC (9) ──────────────────────────────────────────────────────────────
+-- ── MISC (9) — note: written before WATER below but references correct tab index ──
 do
 	local page=tabs[9].page; local CW=WIN_W-PAD*2
 	mkSectionLabel(page,"TARGET PLAYER",10)
