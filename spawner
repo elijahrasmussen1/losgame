@@ -107,16 +107,36 @@ local function spawnCharacter(cfg)
 			or clone:FindFirstChildWhichIsA("BasePart", true)
 
 		if root then
-			-- Build a set of BaseParts already connected to root via any Weld/WeldConstraint
+			-- Build a set of BaseParts already joined to root via ANY joint/constraint
+			-- (Weld, WeldConstraint, RigidConstraint, Motor6D, etc.) so we don't
+			-- add a redundant WeldConstraint that fights existing Attachment-based joints.
 			local connected = {}
 			for _, d in ipairs(clone:GetDescendants()) do
-				if d:IsA("Weld") or d:IsA("WeldConstraint") then
+				if d:IsA("JointInstance") then
+					-- Motor6D, Weld, Snap, etc.
 					if d.Part0 == root then connected[d.Part1] = true end
 					if d.Part1 == root then connected[d.Part0] = true end
+				elseif d:IsA("WeldConstraint") then
+					if d.Part0 == root then connected[d.Part1] = true end
+					if d.Part1 == root then connected[d.Part0] = true end
+				elseif d:IsA("Constraint") then
+					-- RigidConstraint, SpringConstraint, BallSocketConstraint, etc.
+					-- These reference parts via Attachment0/Attachment1 properties.
+					if d:IsA("RigidConstraint") or d:IsA("SpringConstraint")
+						or d:IsA("BallSocketConstraint") or d:IsA("HingeConstraint")
+						or d:IsA("CylindricalConstraint") or d:IsA("PrismaticConstraint")
+						or d:IsA("TorsionSpringConstraint") or d:IsA("UniversalConstraint")
+						or d:IsA("PlaneConstraint") or d:IsA("LineForce") then
+						if d.Attachment0 and d.Attachment0.Parent == root then
+							if d.Attachment1 then connected[d.Attachment1.Parent] = true end
+						elseif d.Attachment1 and d.Attachment1.Parent == root then
+							if d.Attachment0 then connected[d.Attachment0.Parent] = true end
+						end
+					end
 				end
 			end
 
-			-- Create WeldConstraints for any part not yet connected to root
+			-- Create WeldConstraints for any BasePart not yet connected to root
 			for _, d in ipairs(clone:GetDescendants()) do
 				if d:IsA("BasePart") and d ~= root and not connected[d] then
 					local wc = Instance.new("WeldConstraint")
@@ -140,27 +160,6 @@ local function spawnCharacter(cfg)
 			-- Still unanchor in the fallback case
 			for _, d in ipairs(clone:GetDescendants()) do
 				if d:IsA("BasePart") then d.Anchored = false end
-			end
-		end
-	end
-
-	-- Ensure a ProximityPrompt exists so the carry client can show the input UI.
-	-- The carry client (hookModel) requires one to be present in the model's
-	-- descendants; without it the carry input never appears.
-	if clone:IsA("Model") then
-		local existingPrompt = clone:FindFirstChildWhichIsA("ProximityPrompt", true)
-		if not existingPrompt then
-			local root = clone:FindFirstChild("Root", true)
-				or clone.PrimaryPart
-				or clone:FindFirstChildWhichIsA("MeshPart", true)
-				or clone:FindFirstChildWhichIsA("BasePart", true)
-			if root then
-				local pp = Instance.new("ProximityPrompt")
-				pp.ActionText   = "Carry"
-				pp.ObjectText   = cfg.name
-				pp.HoldDuration = 0
-				pp.MaxActivationDistance = 10
-				pp.Parent = root
 			end
 		end
 	end
