@@ -10,6 +10,7 @@ local CHARACTERS = {
 	{
 		name        = "NoobiniCakenini",
 		spawnChance = 10,
+		rollMax     = 10,
 		positions   = {
 			Vector3.new(889.928, -4.992, -574.956),
 			Vector3.new(868.196, -4.082, -552.956),
@@ -18,8 +19,18 @@ local CHARACTERS = {
 	{
 		name        = "Allesina",
 		spawnChance = 10,
+		rollMax     = 10,
 		positions   = {
 			Vector3.new(881.117, -1.0, -639.078),
+		},
+	},
+	{
+		name        = "ChillinChilitos",
+		spawnChance = 1,
+		rollMax     = 256,
+		positions   = {
+			Vector3.new(-257.279, 70.022, -507.017),
+			Vector3.new(-19.677,  70.022, -620.042),
 		},
 	},
 }
@@ -117,6 +128,23 @@ timerEndedEvent.Event:Connect(function()
 	end
 end)
 
+-- ── Admin force-spawn bridge ──────────────────────────────────────────────────
+local adminSpawnEvent = Instance.new("BindableEvent")
+adminSpawnEvent.Name   = "AdminForceSpawnEvent"
+adminSpawnEvent.Parent = ReplicatedStorage
+
+adminSpawnEvent.Event:Connect(function(characterName)
+	for _, cfg in ipairs(CHARACTERS) do
+		if cfg.name == characterName then
+			despawnCharacter(cfg)
+			spawnCharacter(cfg)
+			print("[Spawner] 🛡️ Admin force-spawned " .. characterName)
+			return
+		end
+	end
+	warn("[Spawner] Admin force-spawn: unknown character '" .. tostring(characterName) .. "'")
+end)
+
 -- ── Roll loop ─────────────────────────────────────────────────────────────────
 task.spawn(function()
 	task.wait(2)
@@ -129,7 +157,8 @@ task.spawn(function()
 			if isAlive(cfg) then
 				print("[Spawner] ⏳ " .. cfg.name .. " already active")
 			else
-				local roll = math.random(1, 10)
+				local rollMax = cfg.rollMax or 10
+				local roll = math.random(1, rollMax)
 				print("[Spawner] 🎲 " .. cfg.name .. " rolled " .. roll .. " / need <= " .. cfg.spawnChance)
 				if roll <= cfg.spawnChance then
 					spawnCharacter(cfg)

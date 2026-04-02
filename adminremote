@@ -156,6 +156,8 @@ end
 local placementBindables  = ServerStorage:WaitForChild("PlacementBindables", 30)
 local addItemToBackpack   = placementBindables and placementBindables:WaitForChild("AddItemToBackpack", 30)
 
+local adminForceSpawnEvent = ReplicatedStorage:WaitForChild("AdminForceSpawnEvent", 15)
+
 local function backpackApiCall(action, player)
 	if not backpackAPIBindable then return nil end
 	local ok, result = pcall(function()
@@ -710,6 +712,18 @@ adminRemote.OnServerEvent:Connect(function(sender, action, arg1, arg2, arg3)
 			else
 				warn("[AdminRemote] give_item: AddItemToBackpack bindable not found")
 			end
+		elseif itemName == "chillinchilitos" then
+			if addItemToBackpack then
+				local record = {name="ChillinChilitos", modelName="ChillinChilitos", level=1}
+				local ok, err = pcall(function() addItemToBackpack:Invoke(t, record) end)
+				if ok then
+					warn("[AdminRemote] give_item ChillinChilitos → " .. t.Name)
+				else
+					warn("[AdminRemote] give_item ChillinChilitos failed: " .. tostring(err))
+				end
+			else
+				warn("[AdminRemote] give_item: AddItemToBackpack bindable not found")
+			end
 		else
 			warn("[AdminRemote] give_item: unknown item '" .. itemName .. "'")
 		end
@@ -736,6 +750,17 @@ adminRemote.OnServerEvent:Connect(function(sender, action, arg1, arg2, arg3)
 			warn("[AdminRemote] clear_inv: cleared inventory for " .. t.Name)
 		else
 			warn("[AdminRemote] clear_inv: failed for " .. (t and t.Name or "?"))
+		end
+		return
+	end
+	if action == "server_spawn" then
+		local characterName = tostring(arg1 or "")
+		if characterName == "" then warn("[AdminRemote] server_spawn: no character name"); return end
+		if adminForceSpawnEvent then
+			adminForceSpawnEvent:Fire(characterName)
+			warn("[AdminRemote] server_spawn: fired for " .. characterName)
+		else
+			warn("[AdminRemote] server_spawn: AdminForceSpawnEvent not found")
 		end
 		return
 	end

@@ -110,6 +110,7 @@ local modelTemplateCache = {}
 local CARRIABLE = {
 	["NoobiniCakenini"] = true,
 	["Allesina"]        = true,
+	["ChillinChilitos"] = true,
 }
 
 local function cacheModelTemplate(model)

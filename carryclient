@@ -30,6 +30,7 @@ local activePrompt = nil
 local CARRIABLE = {
 	["NoobiniCakenini"] = true,
 	["Allesina"]        = true,
+	["ChillinChilitos"] = true,
 }
 
 -- ── Pickup sounds per carriable name ─────────────────────────────────────────

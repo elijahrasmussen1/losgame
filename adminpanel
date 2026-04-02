@@ -575,6 +575,7 @@ end
 local PREDEFINED_ITEMS = {
 	"wavecoins",
 	"NoobiniCakenini",
+	"ChillinChilitos",
 }
 
 local function attachItemDropdown(box, contentFrame)
@@ -1439,7 +1440,7 @@ local function selectTab(index)
 	end
 end
 
-local TAB_NAMES={"EVENTS","ECONOMY","SPEED","ITEMS","FUSE MACHINE","BAN LOGS","WATER","MISC"}
+local TAB_NAMES={"EVENTS","ECONOMY","SPAWNER","SPEED","ITEMS","FUSE MACHINE","BAN LOGS","WATER","MISC"}
 for i,name in ipairs(TAB_NAMES) do
 	local tbtn=Instance.new("TextButton")
 	tbtn.Name=name; tbtn.Size=UDim2.new(0,TAB_W,1,0); tbtn.BackgroundColor3=C.tabOff
@@ -1678,9 +1679,97 @@ do
 	end)
 end
 
--- ── SPEED (3) ─────────────────────────────────────────────────────────────
+-- ── SPAWNER (3) ───────────────────────────────────────────────────────────
 do
 	local page=tabs[3].page; local CW=WIN_W-PAD*2
+
+	local SPAWNER_BRAINROTS = {"NoobiniCakenini", "ChillinChilitos"}
+
+	local function attachSpawnerDropdown(box, contentFrame)
+		local function rebuildSpawnerDrop(names)
+			local old = contentFrame:FindFirstChild("__SpawnerDrop"); if old then old:Destroy() end
+			if #names == 0 then return end
+			local dropW = box.AbsoluteSize.X
+			local dropH = math.min(#names, MAX_DD) * ITEM_H
+			local drop = Instance.new("Frame")
+			drop.Name = "__SpawnerDrop"
+			drop.Size = UDim2.new(0, dropW, 0, 0)
+			local relX = box.AbsolutePosition.X - contentFrame.AbsolutePosition.X
+			local relY = box.AbsolutePosition.Y - contentFrame.AbsolutePosition.Y + box.AbsoluteSize.Y + 2
+			drop.Position = UDim2.new(0, relX, 0, relY)
+			drop.BackgroundColor3 = C.dropBg; drop.BorderSizePixel = 0
+			drop.ZIndex = 30; drop.ClipsDescendants = true; drop.Parent = contentFrame
+			mkCorner(drop, UDim.new(0,3)); mkStroke(drop, C.dropBdr, 1)
+			local layout = Instance.new("UIListLayout")
+			layout.SortOrder = Enum.SortOrder.LayoutOrder; layout.Padding = UDim.new(0,0); layout.Parent = drop
+			for i, name in ipairs(names) do
+				if i > MAX_DD then break end
+				local row = Instance.new("TextButton")
+				row.Size = UDim2.new(1,0,0,ITEM_H); row.BackgroundColor3 = C.dropBg; row.Text = name
+				row.TextColor3 = C.text; row.Font = Enum.Font.Gotham; row.TextSize = 12
+				row.TextXAlignment = Enum.TextXAlignment.Left; row.AutoButtonColor = false
+				row.LayoutOrder = i; row.ZIndex = 31; row.BorderSizePixel = 0; row.Parent = drop
+				local rp = Instance.new("UIPadding"); rp.PaddingLeft = UDim.new(0,8); rp.Parent = row
+				if i < math.min(#names, MAX_DD) then
+					local sep = Instance.new("Frame")
+					sep.Size = UDim2.new(1,0,0,1); sep.Position = UDim2.new(0,0,1,-1)
+					sep.BackgroundColor3 = C.dropBdr; sep.BorderSizePixel = 0; sep.ZIndex = 32; sep.Parent = row
+				end
+				row.MouseEnter:Connect(function() TweenService:Create(row,TF,{BackgroundColor3=C.dropHov}):Play() end)
+				row.MouseLeave:Connect(function() TweenService:Create(row,TF,{BackgroundColor3=C.dropBg}):Play() end)
+				row.MouseButton1Click:Connect(function()
+					box.Text = name
+					local d = contentFrame:FindFirstChild("__SpawnerDrop"); if d then d:Destroy() end
+				end)
+			end
+			TweenService:Create(drop, TweenInfo.new(0.10,Enum.EasingStyle.Quint,Enum.EasingDirection.Out),
+				{Size=UDim2.new(0,dropW,0,dropH)}):Play()
+		end
+		box:GetPropertyChangedSignal("Text"):Connect(function()
+			local q = box.Text:match("^%s*(.-)%s*$"):lower()
+			if q == "" then local d = contentFrame:FindFirstChild("__SpawnerDrop"); if d then d:Destroy() end; return end
+			local results = {}
+			for _, name in ipairs(SPAWNER_BRAINROTS) do
+				if name:lower():sub(1,#q)==q then table.insert(results, name) end
+			end
+			table.sort(results)
+			if #results==0 or (#results==1 and results[1]:lower()==q) then
+				local d = contentFrame:FindFirstChild("__SpawnerDrop"); if d then d:Destroy() end; return
+			end
+			rebuildSpawnerDrop(results)
+		end)
+		box.FocusLost:Connect(function()
+			task.delay(0.22, function()
+				local d = contentFrame:FindFirstChild("__SpawnerDrop"); if d then d:Destroy() end
+			end)
+		end)
+	end
+
+	mkSectionLabel(page,"ITEM NAME",10)
+	local spawnInput=Instance.new("TextBox")
+	spawnInput.Size=UDim2.new(1,-PAD*2,0,32); spawnInput.Position=UDim2.new(0,PAD,0,34)
+	spawnInput.BackgroundColor3=C.inputBg; spawnInput.BorderSizePixel=0
+	spawnInput.PlaceholderText="Enter brainrot name..."; spawnInput.PlaceholderColor3=C.phCol
+	spawnInput.Text=""; spawnInput.TextColor3=C.inputText; spawnInput.Font=Enum.Font.Gotham
+	spawnInput.TextSize=13; spawnInput.TextXAlignment=Enum.TextXAlignment.Center
+	spawnInput.ClearTextOnFocus=false; spawnInput.ZIndex=5; spawnInput.Parent=page
+	mkCorner(spawnInput,UDim.new(0,4)); mkStroke(spawnInput,C.inputBdr,1)
+	attachSpawnerDropdown(spawnInput,page)
+
+	local HALF=math.floor((CW-6)/2)
+	mkBtn(page,"SERVER SPAWN",C.btnGreen,C.btnGreenDk,HALF,36,PAD,82,function()
+		local name=spawnInput.Text:match("^%s*(.-)%s*$")
+		if name=="" then showToast("Enter brainrot name") return end
+		adminRemote:FireServer("server_spawn", name); showFeedback("Server spawned "..name)
+	end)
+	mkBtn(page,"GLOBAL SPAWN",C.btnCyan,C.btnCyanDk,HALF,36,PAD+HALF+6,82,function()
+		showToast("Global spawn coming soon")
+	end)
+end
+
+-- ── SPEED (4) ─────────────────────────────────────────────────────────────
+do
+	local page=tabs[4].page; local CW=WIN_W-PAD*2
 	mkSectionLabel(page,"TARGET PLAYER",10)
 	local spdPlayer=Instance.new("TextBox")
 	spdPlayer.Size=UDim2.new(1,-PAD*2,0,32); spdPlayer.Position=UDim2.new(0,PAD,0,34)
@@ -1744,9 +1833,9 @@ do
 	end)
 end
 
--- ── ITEMS (4) ─────────────────────────────────────────────────────────────
+-- ── ITEMS (5) ─────────────────────────────────────────────────────────────
 do
-	local page=tabs[4].page; local CW=WIN_W-PAD*2
+	local page=tabs[5].page; local CW=WIN_W-PAD*2
 	mkSectionLabel(page,"TARGET PLAYER",10)
 	local itmPlayer=Instance.new("TextBox")
 	itmPlayer.Size=UDim2.new(1,-PAD*2,0,32); itmPlayer.Position=UDim2.new(0,PAD,0,34)
@@ -1815,9 +1904,9 @@ do
 	end
 end
 
--- ── FUSE MACHINE (5) ──────────────────────────────────────────────────────
+-- ── FUSE MACHINE (6) ──────────────────────────────────────────────────────
 do
-	local page=tabs[5].page; local CW=WIN_W-PAD*2
+	local page=tabs[6].page; local CW=WIN_W-PAD*2
 	mkSectionLabel(page,"DURATION (seconds)",28)
 	local durInput=Instance.new("TextBox")
 	durInput.Size=UDim2.new(1,-PAD*2,0,36); durInput.Position=UDim2.new(0,PAD,0,54)
@@ -1853,9 +1942,9 @@ do
 	end)
 end
 
--- ── BAN LOGS (6) ──────────────────────────────────────────────────────────
+-- ── BAN LOGS (7) ──────────────────────────────────────────────────────────
 do
-	local page=tabs[6].page; local CW=WIN_W-PAD*2
+	local page=tabs[7].page; local CW=WIN_W-PAD*2
 	local COL_WIDTHS={0.28,0.20,0.22,0.16,0.14}
 	local COL_LABELS={"USERNAME","MODERATOR","REASON","DURATION","PERMANENT"}
 
@@ -1940,9 +2029,9 @@ do
 	end
 end
 
--- ── MISC (8) ──────────────────────────────────────────────────────────────
+-- ── MISC (9) ──────────────────────────────────────────────────────────────
 do
-	local page=tabs[8].page; local CW=WIN_W-PAD*2
+	local page=tabs[9].page; local CW=WIN_W-PAD*2
 	mkSectionLabel(page,"TARGET PLAYER",10)
 	local targetInput=Instance.new("TextBox")
 	targetInput.Size=UDim2.new(1,-PAD*2,0,32); targetInput.Position=UDim2.new(0,PAD,0,34)
@@ -2002,9 +2091,9 @@ do
 end
 
 
--- ── WATER (7) ──────────────────────────────────────────────────────────────
+-- ── WATER (8) ──────────────────────────────────────────────────────────────
 do
-	local page=tabs[7].page; local CW=WIN_W-PAD*2
+	local page=tabs[8].page; local CW=WIN_W-PAD*2
 	local HALF=math.floor((CW-6)/2)
 
 	-- Scrollable container fills the whole page
